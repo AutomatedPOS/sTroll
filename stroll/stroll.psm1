@@ -277,4 +277,77 @@ function Import-Checklist {
 
     $dCKL.xml.Save($DestinationCKL)
 }
+
+function Get-STIG {
+    <#
+    .SYNOPSIS
+        Downloads the selected STIG from public.cyber.mil and places the zip file in the provided location
+        
+    .DESCRIPTION
+        Hunting and pecking cyber.mil for a specific STIG is a pain.  This function will download 1 or all STIGs based on your input.
+    
+    .PARAMETER STIGID
+        Currently forces ALL STIGS.  This will be tricky as some STIG IDs are included in a collection, but their names have nothing to due with the file name.
+        Need to work on this one.  Maybe a fuzzy match?
+    
+    .PARAMETER DestinationPath
+        Location to place the downloaded STIG
+    
+    .EXAMPLE
+        Get-STIG -Destination "C:\Temp\STIGs\" -STIGID "ALL"
+
+    #>
+    param (
+        [Parameter(Mandatory)]
+        [string]$DestinationPath,
+        [PSDefaultValue(Help='ALL')]
+        [ValidateSet("ALL")]
+        [string]$STIGID = "ALL"
+    )
+    if(Test-Path $DestinationPath){
+        #Path is good,  Pull CyberMIL links to STIGs
+        $CyberMIL = Invoke-WebRequest -Uri "https://public.cyber.mil/stigs/downloads/"
+        If(($CyberMIL.Links | Where-Object {$_.href -like "*STIG.zip"}).count -gt 0){
+            #STIGs are available to download.
+            if($STIGID -eq "ALL"){
+                #Download all STIGs
+                ForEach($STIGLink in ($CyberMIL.Links | Where-Object {$_.href -like "*STIG.zip"}).href ){
+                    $tempDestinationPath = $DestinationPath
+                    if($tempDestinationPath[-1] -eq "\"){
+                        $tempDestinationPath = $tempDestinationPath + ($STIGLink -replace ".*./","")
+                    }
+                    else{
+                        $tempDestinationPath = $tempDestinationPath + "\" + ($STIGLink -replace ".*./","")
+                    }
+                    Invoke-WebRequest -Uri $STIGLink -OutFile $tempDestinationPath
+
+                    Remove-Variable tempDestinationPath
+                }
+                ForEach($SRGLink in ($CyberMIL.Links | Where-Object {$_.href -like "*SRG.zip"}).href ){
+                    $tempDestinationPath = $DestinationPath
+                    if($tempDestinationPath[-1] -eq "\"){
+                        $tempDestinationPath = $tempDestinationPath + ($SRGLink -replace ".*./","")
+                    }
+                    else{
+                        $tempDestinationPath = $tempDestinationPath + "\" + ($SRGLink -replace ".*./","")
+                    }
+                    Invoke-WebRequest -Uri $SRGLink -OutFile $tempDestinationPath
+                    Remove-Variable tempDestinationPath
+                }
+            }
+            else{
+                #Download just the selected STIG
+            }
+        }
+        else {
+            Write-Error -Message "Unable to access public.Cyber.Mil"
+        }
+
+    }
+    else {
+        Write-Error -Message "Provided path does not exist."
+    }
+
+    
+}
 #endregion
