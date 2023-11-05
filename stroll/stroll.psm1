@@ -352,6 +352,106 @@ function Import-Checklist {
     $dCKL.xml.Save($DestinationCKL)
 }
 
+function Import-SCCXCCDF {
+    <#
+    .SYNOPSIS
+        Imports SCC Tool XCCDF results into checklist.
+        
+    .DESCRIPTION
+        
+    
+    .PARAMETER SourceXCCDF
+        Path to the Source SCC XCCDF file (*_XCCDF-Results*.xml) that will be used within the import.
+
+    .PARAMETER DestinationCKL
+        Path to the destination Checklist file (.ckl) that will be used within the import.
+
+    .PARAMETER MatchON
+        Default - RuleID
+        Sets how this function will perform matching/
+        RuleID means findings will be matched by RULEID value (Most Accurate / Most Stringent)
+        VulnID means findings will be matched by VULNID value (Least Accurate / Least Stringent)
+        WARNING:  Matching by VULNID can and will generate Type I and Type II Errors (False Positive / False Negative), specifically when upgrading checklists.
+
+    .PARAMETER FindingDetails
+		Default - Basic
+		Sets the amount of data to be placed in the Finding Details field.  Full will greatly increase the size of the checklist.
+		Basic - [Tool]:  Result.  Example  SCC: Failed
+		Full - Entire Benchmark.TestResult.RuleResult.Message.Text (Very Long)
+        
+    .PARAMETER DataSet
+        Default - Finding
+        Infoms this function what set of data should be copied from SOURCE to DESTINATION
+        Finding - Will copy only findings over, leaving the Asset Information alone in the destination.
+        Asset - Will copy only asset information over, leaving the finding information alone in the destination
+        All - Will copy both asset and finding information to destination    
+    
+    .EXAMPLE
+        Import-SCCXCCDF -SourceXCCDF "C:\Temp\Source.xml" -DestinationCKL "C:\Temp\Destination.ckl" -MatchOn VULNID -FindingDetails Full -DataSet ALL
+
+    #>
+    param (
+        [Parameter(Mandatory)]
+        [string]$SourceXCCDF,
+        [Parameter(Mandatory)]
+        [string]$DestinationCKL,
+        [PSDefaultValue(Help='RULEID')]
+        [ValidateSet("RULEID","VULNID")]
+        [string]$MatchOn = "RULEID",
+        [PSDefaultValue(Help='Basic')]
+        [ValidateSet("Basic","Full")]     
+		[string]$FindingDetails = "Basic",
+        [PSDefaultValue(Help='FINDING')]
+        [ValidateSet("ALL","ASSET","FINDING")]
+        [string]$DataSet = "FINDING"
+    )
+    
+    [SCCXCCDF]$sXCCDF = [SCCXCCDF]::new($SourceXCCDF)
+    [Checklist]$dCKL = [Checklist]::new($DestinationCKL)
+    
+    if(($DataSet -eq "ASSET") -or ($DataSet -eq "ALL")){
+        $dCKL.HOST_NAME = $sXCCDF.HOST_NAME 
+        $dCKL.HOST_IP = $sXCCDF.HOST_IP
+        $dCKL.HOST_MAC = $sXCCDF.HOST_MAC
+        $dCKL.HOST_FQDN = $sXCCDF.HOST_FQDN
+        $dCKL.SetHOSTNAME()
+        $dCKL.SetIP()
+        $dckl.SetMAC()
+        $dCKL.SetFQDN()
+        
+    }
+
+    if(($DataSet -eq "FINDING") -or ($DataSet -eq "ALL")){
+        $sXCCDF.AnalyzeVulns()
+        $dCKL.AnalyzeVulns()
+        foreach($sVuln in $sXCCDF.VULNS){
+            if($dCKL.VULNS.VulnID -contains $sVuln.VulnID){
+                $vulnIndex = $dCKL.VULNS.VulnID.IndexOf($sVuln.VulnID)
+                if($dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].STIG_DATA.ATTRIBUTE_DATA[$dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].STIG_DATA.VULN_ATTRIBUTE.IndexOf("Vuln_Num") -eq $sVuln.VulnID]){
+                    #2x checking the index.
+                    if(($MatchOn -eq "VULNID") -or ($dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].STIG_DATA.ATTRIBUTE_DATA[$dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].STIG_DATA.VULN_ATTRIBUTE.IndexOf("Rule_ID") -eq $sVuln.RuleID])){
+                        if(($sVuln.Status -eq "NotAFinding") -or ($sVuln.Status -eq "Open") -or ($sVuln.Status -eq "Not_Applicable") ){
+                            $dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].STATUS = $sVuln.STATUS
+							if($FindingDetails -eq "Basic"){
+								$dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].FINDING_DETAILS = "SCC Result: " + $sVuln.Status
+							}
+							elseif($FindingDetails -eq "Full"){
+								$dCKL.xml.CHECKLIST.STIGS.iSTIG.VULN[$vulnIndex].FINDING_DETAILS = $sVuln.FindingDetails
+							}
+                            
+                            
+                        }
+                    }
+                }
+
+                Remove-Variable vulnIndex
+            }
+        }
+    }
+
+    $dCKL.xml.Save($DestinationCKL)
+}
+
 function Get-STIG {
     <#
     .SYNOPSIS
