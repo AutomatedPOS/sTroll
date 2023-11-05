@@ -139,6 +139,73 @@ class Checklist{
     }
 }
 
+class SCCXCCDF{
+    [string]$stigid
+    [string]$title
+    [string]$version
+    [string]$release
+    [System.IO.FileSystemInfo]$FileInfo
+    [System.Xml.XmlNode]$xml
+    [string]$hash
+    [string]$uniqueID
+    [string]$HOST_NAME
+    [string]$WEB_DB_INSTANCE
+    [string]$WEB_DB_SITE
+    [string]$ROLE
+    [string]$TECH_AREA
+    [string]$WEB_OR_DATABASE
+    [string]$HOST_IP
+    [string]$HOST_MAC
+    [string]$HOST_FQDN
+    [string]$TARGET_COMMENT
+    [string]$AssetType
+    [System.Collections.ArrayList]$VULNS = @()
+
+    SCCXCCDF([string]$pathToXCCDF){
+        $this.FileInfo = Get-ChildItem -Path $pathToXCCDF
+        $this.xml = (Select-Xml -Path $this.FileInfo.FullName -XPath /).node
+        $this.stigid = $this.xml.Benchmark.id -replace ".*benchmark_",""
+        $this.title = $this.xml.Benchmark.title
+        $this.version = $this.xml.Benchmark.version.'#text' -replace "\..*",""
+        $this.release = $this.xml.Benchmark.version.'#text' -replace ".*\.",""
+        $this.AssetType = ""
+        $this.HOST_NAME = ($this.xml.Benchmark.TestResult.target).ToUpper()
+        $this.HOST_IP = $this.xml.Benchmark.TestResult.'target-address'[0]
+        $this.HOST_MAC = $this.xml.Benchmark.TestResult.'target-facts'.fact.'#text'[$this.xml.Benchmark.TestResult.'target-facts'.fact.name.IndexOf("urn:scap:fact:asset:identifier:mac")]
+        $this.HOST_FQDN = $this.xml.Benchmark.TestResult.'target-facts'.fact.'#text'[$this.xml.Benchmark.TestResult.'target-facts'.fact.name.IndexOf("urn:scap:fact:asset:identifier:fqdn")]
+        $this.uniqueID = $this.HOST_NAME +"_"+ $this.stigid +"_"+ $this.WEB_DB_INSTANCE +"_" + $this.WEB_DB_SITE
+    }
+    [void] AnalyzeVulns(){
+        $this.VULNS =@()
+        ForEach($lclVuln in $this.xml.Benchmark.TestResult.'rule-result'){
+            $lclVulnID = ($lclVuln.idref -replace ".*stig_rule_S","") -replace "r.*"
+            $lclRuleID = $lclVuln.idref -replace ".*stig_rule_",""
+            $lclStatus = ""
+            if($lclVuln.result -eq "pass"){
+                $lclStatus = "NotAFinding"
+            }
+            elseif ($lclVuln.result -eq "fail") {
+                $lclStatus = "Open"
+            }
+            elseif ($lclVuln.result -eq "notapplicable"){
+                $lclStatus = "Not_Applicable"
+            }
+
+            $lclFindingDetails = $lclVuln.message.'#text'
+
+            if($lclStatus -eq ""){
+                #do nothing?
+            }
+            else{
+                [Vulnerability]$newVuln = [Vulnerability]::new($lclVulnID,$lclStatus,$lclFindingDetails,$lclRuleID)
+                $this.VULNS.Add($newVuln)
+            }
+            Remove-Variable lclVuln,lclRuleID,lclStatus,lclFindingDetails
+
+        }
+    }
+}
+
 class Vulnerability{
     [string]$VulnID
     [string]$Status
@@ -162,6 +229,13 @@ class Vulnerability{
         $this.Severity = $VulnXML.STIG_DATA.ATTRIBUTE_DATA[$VulnXML.STIG_DATA.VULN_ATTRIBUTE.IndexOf("Severity")]
         $this.RuleID = $VulnXML.STIG_DATA.ATTRIBUTE_DATA[$VulnXML.STIG_DATA.VULN_ATTRIBUTE.IndexOf("Rule_ID")]
         $this.points = 0
+    }
+
+    Vulnerability([string]$xVulnID,[string]$xStatus,[string]$xFindingDetails,[string]$xRuleID){
+        $this.VulnID = $xVulnID
+        $this.Status = $xStatus
+        $this.FindingDetails = $xFindingDetails
+        $this.RuleID = $xRuleID
     }
 
     [void] SetOverride(){
