@@ -524,4 +524,508 @@ function Get-STIG {
 
     
 }
+
+function New-TemplateCKL {
+<#
+    .SYNOPSIS
+        Creates a CKL File based on a provided STIG ZIP
+        
+    .DESCRIPTION
+        
+    
+    .PARAMETER SourceZIP
+        Path to the STIG ZIP
+    
+    .PARAMETER DestinationPath
+        Path (Directory) to place the template CKL
+
+    
+    .EXAMPLE
+        New-TemplateCKL -SourceZIP C:\Temp\SourceZIP.zip -DestinationPath C:\Temp
+
+    #>
+    param (
+        [Parameter(Mandatory)]
+        [string]$SourceZIP,
+        [Parameter(Mandatory)]
+        [string]$DestinationPath
+    )
+    #TO DO - Clean this up.. Most of the XML Writer code blocks can be put into a loop.  Did not do this initially because i wanted to make sure i was pulling the correct information from the XML.
+    
+    #check paths
+    
+    #open STIG ZIP
+    Add-Type -Assembly  "System.IO.Compression.Filesystem"
+    $stigZIP = [Io.Compression.zipfile]::OpenRead($SourceZIP)
+    $stigFiles = $stigZIP.Entries | Where-Object {$_.Name -like "*xccdf.xml"}
+    ForEach($xccdf in $stigFiles){
+        $xccdfStream = $xccdf.Open()
+        $reader = New-Object IO.StreamReader($xccdfStream)
+        $text = $reader.ReadToEnd()
+        $XMLxccdf = (Select-Xml -Content $text -XPath /).node
+        
+
+        $lclSTIGID = $XMLxccdf.Benchmark.id
+        $lclSTIGVersion = $XMLxccdf.Benchmark.version
+        $lclSTIGRelease = $XMLxccdf.Benchmark.'plain-text'.'#text'[$XMLxccdf.Benchmark.'plain-text'.id.IndexOf("release-info")]
+        $lclSTIGRelease = $lclSTIGRelease -replace " Benchmark.*",""
+        $lclSTIGRelease = $lclSTIGRelease -replace "Release: ",""
+        $CKLFileName = $lclSTIGID + "_V" + $lclSTIGVersion + "R" + $lclSTIGRelease + ".ckl"
+        $outFile = $DestinationPath + "\" + $CKLFileName
+        $lclSTIGUUID = (New-Guid).Guid
+        
+        #Start XML Writer
+        $SettingsXML = [System.Xml.XmlWriterSettings]::new()
+        $SettingsXML.Indent = $true
+        $SettingsXML.NewLineChars = "`r`n"
+        $SettingsXML.IndentChars = "`t"
+
+        $WriterXML = [System.Xml.XmlWriter]::Create($outFile,$SettingsXML)
+        #$WriterXML = [System.Xml.XmlWriter]::new()
+        $WriterXML.WriteComment("DISA STIG Viewer :: 2.17")
+        $WriterXML.WriteStartElement("CHECKLIST")
+        #region ASSET
+            $WriterXML.WriteStartElement("ASSET")
+                $WriterXML.WriteStartElement("ROLE") 
+                    $WriterXML.WriteString("None")
+                $WriterXML.WriteEndElement() #role
+                $WriterXML.WriteStartElement("ASSET_TYPE") 
+                    $WriterXML.WriteString("Computing")
+                $WriterXML.WriteEndElement() #ASSET_TYPE
+                $WriterXML.WriteStartElement("MARKING") 
+                    $WriterXML.WriteString("CUI")
+                $WriterXML.WriteEndElement() #MARKING
+                $WriterXML.WriteStartElement("HOST_NAME") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #HOST_NAME
+                $WriterXML.WriteStartElement("HOST_IP") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #HOST_IP
+                $WriterXML.WriteStartElement("HOST_MAC") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #HOST_MAC
+                $WriterXML.WriteStartElement("HOST_FQDN") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #HOST_FQDN
+                $WriterXML.WriteStartElement("TARGET_COMMENT") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #TARGET_COMMENT
+                #GET TECH AREA FROM LIST!!!!
+                $WriterXML.WriteStartElement("TECH_AREA") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #TECH_AREA
+                $WriterXML.WriteStartElement("TARGET_KEY") 
+                    $WriterXML.WriteString($XMLxccdf.Benchmark.Group[0].Rule.reference.identifier)
+                $WriterXML.WriteEndElement() #TARGET_KEY
+                #GET WEB or DB FROM LIST!!!!
+                $WriterXML.WriteStartElement("WEB_OR_DATABASE") 
+                    $WriterXML.WriteString("false")
+                $WriterXML.WriteEndElement() #WEB_OR_DATABASE
+                $WriterXML.WriteStartElement("WEB_DB_SITE") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #WEB_DB_SITE
+                $WriterXML.WriteStartElement("WEB_DB_INSTANCE") 
+                    $WriterXML.WriteString("")
+                $WriterXML.WriteEndElement() #WEB_DB_INSTANCE
+            $WriterXML.WriteEndElement() #asset
+        #endregion
+            $WriterXML.WriteStartElement("STIGS")
+                $WriterXML.WriteStartElement("iSTIG")
+                    #region STIG INFO
+                    $WriterXML.WriteStartElement("STIG_INFO")
+                        #version    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("version")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($lclSTIGVersion)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #classification    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("classification")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString("UNCLASSIFIED")
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #customname    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("customname")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString("")
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #stigid    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("stigid")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($lclSTIGID)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #description    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("description")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($XMLXccdf.Benchmark.description)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #filename    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("filename")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($xccdf.Name)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #releaseinfo    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("releaseinfo")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($XMLxccdf.Benchmark.'plain-text'.'#text'[$XMLxccdf.Benchmark.'plain-text'.id.IndexOf("release-info")])
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #title    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("title")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($XMLXccdf.Benchmark.title)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #uuid    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("uuid")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($lclSTIGUUID)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #notice    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("notice")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString("terms-of-use")
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        #source    
+                        $WriterXML.WriteStartElement("SI_DATA")
+                        $WriterXML.WriteStartElement("SID_NAME")
+                                $WriterXML.WriteString("source")
+                            $WriterXML.WriteEndElement() #SID_NAME
+                            $WriterXML.WriteStartElement("SID_DATA")
+                                $WriterXML.WriteString($XMLXccdf.Benchmark.reference.source)
+                            $WriterXML.WriteEndElement() #SID_DATA
+                        $WriterXML.WriteEndElement() #SI_DATA
+                        
+                    $WriterXML.WriteEndElement() #STIG_INFO
+                    #endregion
+                    #region VULNS
+                    ForEach($lclVULN in $XMLxccdf.Benchmark.Group){
+                        $WriterXML.WriteStartElement("VULN")
+                            #Vuln_Num
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Vuln_Num")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.id)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Severity
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Severity")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.rule.severity)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Group_Title
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Group_Title")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.title)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Rule_ID
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Rule_ID")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.rule.id)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Rule_Ver
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Rule_Ver")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.rule.version)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Rule_Title
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Rule_Title")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.rule.title)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Vuln_Discuss
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Vuln_Discuss")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(($lclVuln.Rule.description -replace ".*<VulnDiscussion>",""  -replace "</VulnDiscussion>.*",""))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #IA_Controls
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("IA_Controls")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<IAControls\>(.*)\<\/IAControls",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Check_Content
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Check_Content")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.Rule.check.'check-content')
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Fix_Text
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Fix_Text")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.Rule.fixtext.'#text')
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #False_Positives
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("False_Positives")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<FalsePositives\>(.*)\<\/FalsePositives",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #False_Negatives
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("False_Negatives")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<FalseNegatives\>(.*)\<\/FalseNegatives",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Documentable
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Documentable")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<Documentable\>(.*)\<\/Documentable",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Mitigations
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Mitigations")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<Mitigations\>(.*)\<\/Mitigations",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Potential_Impact
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Potential_Impact")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<PotentialImpacts\>(.*)\<\/PotentialImpacts",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Third_Party_Tools
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Third_Party_Tools")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<ThirdPartyTools\>(.*)\<\/ThirdPartyTools",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Mitigation_Control
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Mitigation_Control")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<MitigationControl\>(.*)\<\/MitigationControl",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Responsibility
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Responsibility")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<Responsibility\>(.*)\<\/Responsibility",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Security_Override_Guidance
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Security_Override_Guidance")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString(([regex]::Match($lclVuln.Rule.description.ToString(),"\<SeverityOverrideGuidance\>(.*)\<\/SeverityOverrideGuidance",[System.Text.RegularExpressions.RegexOptions]::Multiline).Groups[1].Value))
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Check_Content_Ref
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Check_Content_Ref")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.Rule.check.'check-content-ref'.name)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Weight
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Weight")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclVuln.Rule.weight)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Class
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("Class")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString("Unclass")
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #STIGRef
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("STIGRef")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($XMLXccdf.Benchmark.title + " :: Version " + $lclSTIGVersion + ", " + $XMLxccdf.Benchmark.'plain-text'.'#text'[$XMLxccdf.Benchmark.'plain-text'.id.IndexOf("release-info")] )
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #TargetKey
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("TargetKey")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($XMLxccdf.Benchmark.Group[0].Rule.reference.identifier)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #STIG_UUID
+                            $WriterXML.WriteStartElement("STIG_DATA")
+                                $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                    $WriterXML.WriteString("STIG_UUID")
+                                $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                    $WriterXML.WriteString($lclSTIGUUID)
+                                $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                            $WriterXML.WriteEndElement() #STIG_DATA
+                            #Legacy Loop!
+                            ForEach($legacy in ($lclVULN.Rule.ident | Where-Object {$_.system -eq "http://cyber.mil/legacy"}).'#text'){
+                                #LEGACY_ID
+                                $WriterXML.WriteStartElement("STIG_DATA")
+                                    $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                        $WriterXML.WriteString("LEGACY_ID")
+                                    $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                    $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                        $WriterXML.WriteString($legacy)
+                                    $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                                $WriterXML.WriteEndElement() #STIG_DATA
+                            }
+
+                            #CCI Loop
+                            ForEach($CCI in ($lclVULN.Rule.ident | Where-Object {$_.system -eq "http://cyber.mil/CCI"}).'#text'){
+                                #CCI_REF
+                                $WriterXML.WriteStartElement("STIG_DATA")
+                                    $WriterXML.WriteStartElement("VULN_ATTRIBUTE")
+                                        $WriterXML.WriteString("CCI_REF")
+                                    $WriterXML.WriteEndElement() #VULN_ATTRIBUTE
+                                    $WriterXML.WriteStartElement("ATTRIBUTE_DATA")
+                                        $WriterXML.WriteString($CCI)
+                                    $WriterXML.WriteEndElement() #ATTRIBUTE_DATA
+                                $WriterXML.WriteEndElement() #STIG_DATA
+                            }
+
+                            #status
+                            $WriterXML.WriteStartElement("STATUS")
+                                $WriterXML.WriteString("Not_Reviewed")
+                            $WriterXML.WriteEndElement() #STATUS
+                            #FINDING_DETAILS
+                            $WriterXML.WriteStartElement("FINDING_DETAILS")
+                                $WriterXML.WriteString("")
+                            $WriterXML.WriteEndElement() #FINDING_DETAILS
+                            #COMMENTS
+                            $WriterXML.WriteStartElement("COMMENTS")
+                                $WriterXML.WriteString("")
+                            $WriterXML.WriteEndElement() #COMMENTS
+                            #SEVERITY_OVERRIDE
+                            $WriterXML.WriteStartElement("SEVERITY_OVERRIDE")
+                                $WriterXML.WriteString("")
+                            $WriterXML.WriteEndElement() #SEVERITY_OVERRIDE
+                            #SEVERITY_JUSTIFICATION
+                            $WriterXML.WriteStartElement("SEVERITY_JUSTIFICATION")
+                                $WriterXML.WriteString("")
+                            $WriterXML.WriteEndElement() #SEVERITY_JUSTIFICATION
+                        $WriterXML.WriteEndElement() #VULN
+                    }
+                    #endregion
+                $WriterXML.WriteEndElement() #iSTIG
+            $WriterXML.WriteEndElement()#STIGS
+        $WriterXML.WriteEndElement() #checklist
+        #end write
+        $WriterXML.flush()
+        $WriterXML.close()
+
+
+        $reader.Close()
+        $xccdfstream.close()
+    }
+    $stigZIP.Dispose()
+
+
+
+}
 #endregion
