@@ -551,6 +551,7 @@ function New-TemplateCKL {
         [string]$DestinationPath
     )
     #TO DO - Clean this up.. Most of the XML Writer code blocks can be put into a loop.  Did not do this initially because i wanted to make sure i was pulling the correct information from the XML.
+    #Spot checked - The below code makes almost identical checklists as STIG Viewer, except for the STIG UUID and STIG viewer will place empty LEGACY id fields.
     
     #check paths
     
@@ -570,6 +571,11 @@ function New-TemplateCKL {
         $lclSTIGRelease = $XMLxccdf.Benchmark.'plain-text'.'#text'[$XMLxccdf.Benchmark.'plain-text'.id.IndexOf("release-info")]
         $lclSTIGRelease = $lclSTIGRelease -replace " Benchmark.*",""
         $lclSTIGRelease = $lclSTIGRelease -replace "Release: ",""
+        if($lclSTIGRelease -eq "R"){
+            $lclSTIGRelease = $XMLxccdf.Benchmark.'plain-text'.'#text'
+            $lclSTIGRelease = $lclSTIGRelease -replace " Benchmark.*",""
+            $lclSTIGRelease = $lclSTIGRelease -replace "Release: ",""
+        }
         $CKLFileName = $lclSTIGID + "_V" + $lclSTIGVersion + "R" + $lclSTIGRelease + ".ckl"
         $outFile = $DestinationPath + "\" + $CKLFileName
         $lclSTIGUUID = (New-Guid).Guid
@@ -1028,4 +1034,6 @@ function New-TemplateCKL {
 
 
 }
+
+
 #endregion
