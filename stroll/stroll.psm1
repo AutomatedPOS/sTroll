@@ -1495,5 +1495,80 @@ function New-TemplateCKL {
 
 }
 
+function Resize-CKLFileName {
+    <#
+    .SYNOPSIS
+        CKL File names can get rather large.  This function will reduce the length of the CKL file name to a given character size.
+        
+    .DESCRIPTION
+        
+    
+    .PARAMETER HOST_NAME
+        HostName of the associated checklist.  This field should never be resized
+    
+    .PARAMETER STIGID
+        STIGID of the associated checklist.  This field should be the last one to be resized
+
+    .PARAMETEr DBSite
+        Website or Database name of the associated checklist. 
+    
+    .PARAMETER DBInstance
+        Database Instance Name of the associated checklist
+
+    .PARAMETER vr
+        Version and Release in "V#R#" format of the associated checklist.  Should never be resized.
+
+    .PARAMETER fileExtension
+        File extenstion in the ".ckl" format.  
+    
+    .PARAMETER MaxFileLength
+        Force the maximum length of the file name.  Never set this below 70.
+
+    .EXAMPLE
+        Resize-CKLFileName -HOST_NAME "WorkstationABC" -stigID "MS_Windows_11_STIG" -vr "V1R3" -fileExtension ".ckl" -MaxFileLength 80
+
+    #>
+    [string]$newFileName = ""
+    [string]$dtg = (Get-date -Format yyyyMMdd-HHmmssfff).ToString()
+    $newFileName = $HOST_NAME + "_" + $stigID + "_" + $vr + "_" + $DBInstance + "_" + $DBSite + "_" + $dtg + $fileExtension
+    $newFileName = $newFileName.Replace(" ","")
+
+    if($newFileName.Length -gt $MaxFileLength){
+        #Preferred shorten
+        if($DBInstance.Length -ge 10){
+            $DBInstance = $DBInstance.Substring(0,9)
+        }
+        if($DBSite.Length -ge 10){
+            $DBSite = $DBSite.Substring(0,9)
+        }
+        $newFileName = $HOST_NAME + "_" + $stigID + "_" + $vr + "_" + $DBInstance + "_" + $DBSite + "_" + $dtg + $fileExtension
+    }
+
+
+    if($newFileName.Length -gt $MaxFileLength){
+        Do{
+            if($DBSite.Length -gt 5){
+                $DBSite = $DBSite.Substring(0,$DBSite.Length -  1)
+            }
+            elseif($DBInstance.Length -gt 5){
+                $DBInstance = $DBInstance.Substring(0,$DBInstance.Length -1)                
+            }
+            elseif($stigID.Length -gt 10){
+                $stigID = $stigID.Substring(0,$stigID.Length -1)
+            }
+            elseif($HOST_NAME.Length -gt 10){
+                $HOST_NAME = $HOST_NAME.Substring(0,$HOST_NAME.Length -1)
+            }
+            
+
+            $newFileName = $HOST_NAME + "_" + $stigID + "_" + $vr + "_" + $DBInstance + "_" + $DBSite + "_" + $dtg + $fileExtension                
+        }
+        until($newFileName.Length -le $MaxFileLength)
+    }
+
+
+
+    return $newFileName
+}
 
 #endregion
