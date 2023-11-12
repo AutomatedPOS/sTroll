@@ -697,6 +697,117 @@ class mappingTechArea{
     }
 }
 
+class STIG{
+    [string]$stigid
+    hidden [string]$TECH_AREA
+    [string]$WEB_OR_DATABASE
+    [string]$WEB_DB_SITE
+    [string]$WEB_DB_INSTANCE
+    [string]$uniqueID
+
+    STIG(){}
+    STIG(
+        [string]$lclID,
+        [string]$lclTechArea = "",
+        [string]$lclWorD = "false",
+        [string]$lclSite = "",
+        [string]$lclInstance = ""
+    ){
+        $this.stigid = $lclID
+        $this.TECH_AREA = $lclTechArea
+        $this.WEB_OR_DATABASE = $lclWorD
+        $this.WEB_DB_SITE = $lclSite
+        $this.WEB_DB_INSTANCE = $lclInstance
+    }
+
+    [void]GenerateUniqueID([string]$providedHostName){
+        $this.uniqueID = $providedHostName + "_" + $this.stigid +"_"+ $this.WEB_DB_INSTANCE + "_"+ $this.WEB_DB_SITE
+    }
+   
+}
+
+class Asset{
+    [string]$ROLE
+    [string]$ASSET_TYPE
+    [string]$HOST_NAME
+    [string]$HOST_IP
+    [string]$HOST_MAC
+    [string]$HOST_FQDN
+    [string]$TARGET_COMMENT
+    [string]$TECH_AREA
+    [switch]$Inactive
+    [System.Collections.ArrayList]$STIGS = @()
+    Asset(){}
+    Asset(
+        [string]$lclRole,
+        [string]$lclAssetType,
+        [string]$lclHostName,
+        [string]$lclHostIP,
+        [string]$lclHostMac,
+        [string]$lclHostFQDN,
+        [string]$lclTargetComment,
+        [string]$lclTechArea
+    ){
+        $this.ROLE = $lclRole
+        $this.ASSET_TYPE = $lclAssetType
+        $this.HOST_NAME = $lclHostName.ToUpper()
+        $this.HOST_IP = $lclHostIP
+        $this.HOST_MAC = $lclHostMac.ToUpper()
+        $this.HOST_FQDN = $lclHostFQDN.ToUpper()
+        $this.TARGET_COMMENT = $lclTargetComment
+        $this.TECH_AREA = $lclTechArea
+    }  
+    [void]AddSTIG([string]$STIGID,[string]$TECH_AREA,[string]$WEB_OR_DATABASE,[string]$WEB_DB_SITE,[string]$WEB_DB_INSTANCE){
+        [STIG]$newSTIG = ([STIG]::new($STIGID,$TECH_AREA,$WEB_OR_DATABASE,$WEB_DB_SITE,$WEB_DB_INSTANCE))
+        $newSTIG.GenerateUniqueID($this.HOST_NAME)
+        ##Check to see if it is already mapped!
+        if($this.STIGS.UniqueID -contains $newSTIG.uniqueID){
+            #already have STIG mapped to asset
+        }
+        else{
+            $this.STIGS.Add($newSTIG)
+
+        }
+
+        
+    }
+    [void]RemoveSTIG([string]$unID){
+        [int]$tempIndex = $This.STIGS.uniqueID.indexof($unID)
+        #This should return a -1 if it is not in the index.  This is CASE Sensitive.
+        if($tempIndex -ge 0){$this.STIGS.RemoveAt($tempIndex)}
+       
+    }
+    [void]SetIP([string]$newIP){
+        $this.HOST_IP = $newIP
+    }
+    [void]SetMAC([string]$newMAC){
+        $this.HOST_MAC = $newMAC
+    }
+    [void]SetFQDN([string]$newFQDN){
+        $this.HOST_FQDN = $newFQDN
+    }
+    [void]SetROLE([string]$newRole){
+        if(($newRole -eq "") -or ($newRole -eq "Workstation") -or ($newRole -eq "Member Server") -or ($newRole -eq "Domain Controller")){
+            $this.ROLE = $newRole
+        }
+    }
+    [void]SetTECHAREA([string]$newTA){
+        if(($newTA -eq "") -or ($newTA -eq "Application Review") -or ($newTA -eq "Boundary Security") -or ($newTA -eq "CDS Admin Review") -or ($newTA -eq "CDS Technical Review") -or ($newTA -eq "Database Review") -or ($newTA -eq "Domain Name System (DNS)") -or ($newTA -eq "Exchange Server") -or ($newTA -eq "Host Based System Security (HBSS)") -or ($newTA -eq "Internal Network") -or ($newTA -eq "Mobility") -or ($newTA -eq "Releasable Networks (REL)") -or ($newTA -eq "Traditional Security") -or ($newTA -eq "UNIX OS") -or ($newTA -eq "VVOIP Review") -or ($newTA -eq "Web Review") -or ($newTA -eq "Windows OS") -or ($newTA -eq "Other Review")){
+            $this.TECH_AREA = $newTA
+        }
+    }
+    [void]SetCOMMENT([string]$newComment){
+        $this.TARGET_COMMENT = $newComment
+    }
+    [void]FlipInactive(){
+        if($this.Inactive){
+            $this.Inactive = $false
+        }
+        else{
+            $this.Inactive = $true
+        }
+    }
+}
 #endregion
 
 #region Functions
