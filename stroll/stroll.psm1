@@ -808,6 +808,366 @@ class Asset{
         }
     }
 }
+
+class AssetList{
+    [System.Collections.ArrayList]$Assets = @()
+    [System.Collections.ArrayList]$importedAssets = @()
+    [xml]$xml
+    [System.IO.FileSystemInfo]$FileInfo
+    #need to figure out JSON piece here.
+
+    [void]AddAsset([string]$lclRole,[string]$lclAssetType,[string]$lclHostName,[string]$lclHostIP,[string]$lclHostMac,[string]$lclHostFQDN,[string]$lclTargetComment,[string]$lclTechArea){
+        [Asset]$newAsset = [Asset]::new($lclRole,$lclAssetType,$lclHostName,$lclHostIP,$lclHostMAC,$lclHostFQDN,$lclTargetComment,$lclTechArea)
+        if($this.Assets.HOST_NAME -contains $lclHostName){
+            #just make sure you are not adding a duplicate asset.  This may need to be removed
+        }
+        Else{
+            $this.Assets.Add($newAsset)
+        }
+        
+    }
+    [void]RemoveAsset([string]$HOST_NAME){
+        $HOST_NAME = $HOST_NAME.ToUpper()
+        if($this.Assets.HOST_NAME -contains $HOST_NAME){
+            $this.Assets.RemoveAt($this.Assets.HOST_NAME.indexof($HOST_NAME))
+        }
+        else{
+        }
+    }
+    [void] ManualAddAsset(){
+        
+        Clear-Host
+        [Asset]$newAsset = [Asset]::new()
+        $newAsset.HOST_NAME = Read-Host "Enter the HOST_NAME"
+        $newAsset.HOST_IP = Read-Host "Enter the HOST_IP"
+        $newAsset.HOST_MAC = Read-Host "Enter the HOST_MAC"
+        $newAsset.HOST_FQDN = Read-Host "Enter the HOST_FQDN"
+        Write-Host "--Asset Type--"
+        Write-Host "[1]  Computing"
+        Write-Host "[2]  Non-Computing"
+        $selection = Read-Host "Select an Asset Type (Default: Computing)"
+        if($selection -eq "2"){$newAsset.ASSET_TYPE = "Non-Computing"}
+        else{$newAsset.ASSET_TYPE = "Computing"}
+        Write-Host ""
+        Write-Host "--Roles--"
+        Write-Host "[1]  None"
+        Write-Host "[2]  Workstation"
+        Write-Host "[3]  Member Server"
+        Write-Host "[4]  Domain Controller"
+        $selection = Read-Host "Select an Asset Role (Default: None)"
+        switch($selection){
+            "2" {$newAsset.ROLE = "Workstation"}
+            "3" {$newAsset.ROLE = "Member Server"}
+            "4" {$newAsset.ROLE = "Domain Controller"}
+            default {$newAsset.ROLE = "None"}
+        }
+        $newAsset.TARGET_COMMENT = Read-Host "Enter a target comment (Suggest the SysAdmin Name / Org)"
+        Write-Host ""
+        Write-Host "--Technology Area--"
+        Write-Host "[a]  None"
+        Write-Host "[b]  Application Review"
+        Write-Host "[c]  Boundary Security"
+        Write-Host "[d]  CDS Admin Review"
+        Write-Host "[e]  CDS Technical Review"
+        Write-Host "[f]  Database Review"
+        Write-Host "[g]  Domain Name System (DNS)"
+        Write-Host "[h]  Exchange Server"
+        Write-Host "[i]  Host Based System Security (HBSS)"
+        Write-Host "[j]  Internal Network"
+        Write-Host "[k]  Mobility"
+        Write-Host "[l]  Releasable Networks (REL)"
+        Write-Host "[m]  Traditional Security"
+        Write-Host "[n]  UNIX OS"
+        Write-Host "[o]  VVOIP Review"
+        Write-Host "[p]  Web Review"
+        Write-Host "[q]  Windows OS"
+        Write-Host "[r]  Other Review"
+        Write-Host ""
+        Write-Host "This will FORCE every associated STIG to this asset to be considered part of this technology area."
+        $selection = Read-Host "Select which technology area to associate this asset (Default = None)"
+        switch($selection){
+            "a"{$newAsset.TECH_AREA = ""}
+            "b"{$newAsset.TECH_AREA = "Application Review"}
+            "c"{$newAsset.TECH_AREA = "Boundary Security"}
+            "d"{$newAsset.TECH_AREA = "CDS Admin Review"}
+            "e"{$newAsset.TECH_AREA = "CDS Technical Review"}
+            "f"{$newAsset.TECH_AREA = "Database Review"}
+            "g"{$newAsset.TECH_AREA = "Domain Name System (DNS)"}
+            "h"{$newAsset.TECH_AREA = "Exchange Server"}
+            "i"{$newAsset.TECH_AREA = "Host Based System Security (HBSS)"}
+            "j"{$newAsset.TECH_AREA = "Internal Network"}
+            "k"{$newAsset.TECH_AREA = "Mobility"}
+            "l"{$newAsset.TECH_AREA = "Releasable Networks (REL)"}
+            "m"{$newAsset.TECH_AREA = "Traditional Security"}
+            "n"{$newAsset.TECH_AREA = "UNIX OS"}
+            "o"{$newAsset.TECH_AREA = "VVOIP Review"}
+            "p"{$newAsset.TECH_AREA = "Web Review"}
+            "q"{$newAsset.TECH_AREA = "Windows OS"}
+            "r"{$newAsset.TECH_AREA = "Other Review"}
+            default{$newAsset.TECH_AREA = ""}
+        }
+        #set them to upper case for the lolz...
+        $newAsset.HOST_NAME = $newAsset.HOST_NAME.ToUpper()
+        $newAsset.HOST_IP = $newAsset.HOST_IP.ToUpper()
+        $newAsset.HOST_MAC = $newAsset.HOST_MAC.ToUpper()
+        $newAsset.HOST_FQDN = $newAsset.HOST_FQDN.ToUpper()
+
+        Clear-Host
+        Write-Host ""
+        Write-Host "HOST_NAME:  " $newAsset.HOST_NAME
+        Write-Host "HOST_IP:    " $newAsset.HOST_IP
+        Write-Host "HOST_MAC:   " $newAsset.HOST_MAC
+        Write-Host "HOST_FQDN:  " $newAsset.HOST_FQDN
+        Write-Host "Asset Type: " $newAsset.ASSET_TYPE
+        Write-Host "Role:       " $newAsset.ROLE
+        Write-Host "Comment:    " $newAsset.TARGET_COMMENT
+        Write-Host "TECH_AREA:  " $newAsset.TECH_AREA
+        Write-Host ""
+        
+        $selection = Read-Host "Is this correct (y/n) (Default = y)"
+        if($selection -ne "n"){
+            if($this.Assets.HOST_NAME -contains $newAsset.HOST_NAME){
+                Write-Error -Message "Asset already exists"
+            }
+            else{
+                $this.Assets.Add($newAsset)
+            }
+        }
+
+
+
+    }
+    [void] ImportXML ([string]$PathToAssetList){
+        if(Test-Path -Path $PathToAssetList){
+            $this.importedAssets = Import-Clixml -Path $PathToAssetList
+            $this.Assets = @()
+            ForEach($tempAsset in $this.importedAssets){
+                $this.AddAsset($tempAsset.ROLE,$tempAsset.ASSET_TYPE,$tempAsset.HOST_NAME,$tempAsset.HOST_IP,$tempAsset.HOST_MAC,$tempAsset.HOST_FQDN,$tempAsset.TARGET_COMMENT,$tempAsset.TECH_AREA)
+                foreach($tempSTIG in $tempAsset.STIGS){
+                    $this.Assets[-1].AddSTIG($tempSTIG.stigid,$tempSTIG.TECH_AREA,$tempSTIG.WEB_OR_DATABASE,$tempSTIG.WEB_DB_SITE,$tempSTIG.WEB_DB_INSTANCE)
+                }
+                if($tempAsset.Inactive){
+                    $this.Assets[-1].Inactive = $true
+                }
+            }
+        }
+        else{
+            Clear-Host
+            Write-Host "Asset List was not found at " $PathToAssetList
+            pause
+        }
+    
+    }
+    [void] ExportXML (){
+        $PathToSave = $PWD.ToString() + "\AssetList.xml"
+        $this.Assets | Export-Clixml -Path $PathToSave    
+        Clear-Host
+        Write-Host "Asset List Saved to " $PathToSave
+        #pause
+    }
+    [void] purgeAssetList(){
+        [string]$randomNumber = Get-Random -Minimum 1000 -Maximum 9999
+        Clear-Host
+        Write-Host "Purge will remove all Assets and STIG associations from memory.  It will not affect the saved Asset List (unless you save the empty list)"
+        Write-Host "Confirm code:  " $randomNumber
+        Write-host ""
+        $selection = Read-Host -Prompt "Enter the Confirm code above to continue with purge"
+        if($selection -eq $randomNumber){
+            $this.Assets = @()
+            Write-Host "Asset List purged"
+            pause
+        }
+        else{
+            Write-Host "Asset list was NOT purged, returning to previous menu"
+            pause
+        }
+    }
+    [void] displayAssetList(){
+        $this.Assets | Select-Object -Property * | Out-GridView
+    }
+    [void] EditAsset([System.Collections.ArrayList]$Templates){
+        $msgResponse = Read-Host -Prompt "Enter the HOST_NAME" 
+        $msgResponse = $msgResponse.ToUpper()
+        if($this.Assets.HOST_NAME -contains $msgResponse){
+            $lclIndex = $this.Assets.HOST_NAME.indexof($msgResponse)
+            #2x check to make sure index isnt dorked up.
+
+            if($msgResponse -eq $this.Assets[$lclIndex].HOST_NAME){
+                $NotFinished = $true
+                DO{
+                    $this.DisplayAssetInfo($msgResponse)
+                    Write-Host "[0] Add STIGs"
+                    Write-Host "[9] Remove STIGs"
+                    Write-Host "[z] Back"
+                    Write-host ""
+                    $menuSelection = Read-Host -Prompt "Which field would you like to change"
+                    switch($menuSelection){
+                        '0'{$this.AddSTIGtoAsset($lclIndex,$Templates)}
+                        '1'{$newIP = Read-Host -Prompt "Enter new IP address" ; $this.Assets[$lclIndex].SetIP($newIP) }
+                        '2'{$newMAC = Read-Host -Prompt "Enter new MAC address";$this.Assets[$lclIndex].SetMAC($newMAC)}
+                        '3'{$newFQDN = Read-Host -Prompt "Enter new FQDN";$this.Assets[$lclIndex].SetFQDN($newFQDN)}
+                        '4'{$newROLE = $this.PromptROLE(); $this.Assets[$lclIndex].SetROLE($newROLE)}
+                        '5'{if($this.Assets[$lclIndex].ASSET_TYPE -eq "Non-Computing"){$this.Assets[$lclIndex].ASSET_TYPE = "Computing"}else{$this.Assets[$lclIndex].ASSET_TYPE = "Non-Computing"}}
+                        '6'{$newTECHAREA = $this.PromptTECHAREA();$this.Assets[$lclIndex].SetTECHAREA($newTECHAREA)}
+                        '7'{$newCOMMENT = Read-Host -Prompt "Enter a Target Comment";$this.Assets[$lclIndex].SetCOMMENT($newCOMMENT)}
+                        '8'{$this.Assets[$lclIndex].FlipInactive()}
+                        '9'{$this.RemoveSTIGFromAsset($lclIndex)}
+                        'z'{$NotFinished = $false}
+                        'q'{exit}
+                        'Q'{exit}
+                    }
+            
+                }
+                WHILE($NotFinished)
+                $this.ExportXML()
+            }
+
+        }
+        else{
+            Write-Error "Unable to locate asset"
+        }
+        
+    }
+    [string]PromptROLE(){
+        $newROLE = ""
+        Clear-Host
+        Write-Host "[1]  No Role"
+        Write-Host "[2]  Workstation"
+        Write-Host "[3]  Member Server"
+        Write-Host "[4]  Domain Contoller"
+        Write-Host ""
+        $menuSelection = Read-Host -prompt "Select a role (No Role)"
+        switch ($menuSelection){
+            '1'{$newROLE = ""}
+            '2'{$newROLE = "Workstation"}
+            '3'{$newROLE = "Member Server"}
+            '4'{$newROLE = "Domain Controller"}
+        }
+
+        return $newROLE
+    }
+    [string]PromptTECHAREA(){
+        $newTECHAREA = ""
+        Clear-Host
+        Write-Host "[a]  None"
+        Write-Host "[b]  Application Review"
+        Write-Host "[c]  Boundary Security"
+        Write-Host "[d]  CDS Admin Review"
+        Write-Host "[e]  CDS Technical Review"
+        Write-Host "[f]  Database Review"
+        Write-Host "[g]  Domain Name System (DNS)"
+        Write-Host "[h]  Exchange Server"
+        Write-Host "[i]  Host Based System Security (HBSS)"
+        Write-Host "[j]  Internal Network"
+        Write-Host "[k]  Mobility"
+        Write-Host "[l]  Releasable Networks (REL)"
+        Write-Host "[m]  Traditional Security"
+        Write-Host "[n]  UNIX OS"
+        Write-Host "[o]  VVOIP Review"
+        Write-Host "[p]  Web Review"
+        Write-Host "[q]  Windows OS"
+        Write-Host "[r]  Other Review"
+        Write-Host ""
+        $menuSelection = Read-Host -Prompt "Select technology area [Default: None]"
+        switch($menuSelection){
+            'a'{$newTECHAREA = ""}
+            'b'{$newTECHAREA = "Application Review"}
+            'c'{$newTECHAREA = "Boundary Security"}
+            'd'{$newTECHAREA = "CDS Admin Review"}
+            'e'{$newTECHAREA = "CDS Technical Review"}
+            'f'{$newTECHAREA = "Database Review"}
+            'g'{$newTECHAREA = "Domain Name System (DNS)"}
+            'h'{$newTECHAREA = "Exchange Server"}
+            'i'{$newTECHAREA = "Host Based System Security (HBSS)"}
+            'j'{$newTECHAREA = "Internal Network"}
+            'k'{$newTECHAREA = "Mobility"}
+            'l'{$newTECHAREA = "Releasable Networks (REL)"}
+            'm'{$newTECHAREA = "Traditional Security"}
+            'n'{$newTECHAREA = "UNIX OS"}
+            'o'{$newTECHAREA = "VVOIP Review"}
+            'p'{$newTECHAREA = "Web Review"}
+            'q'{$newTECHAREA = "Windows OS"}
+            'r'{$newTECHAREA = "Other Review"}
+        }
+
+
+        Return $newTECHAREA
+    }
+    [void]AddSTIGtoAsset([int]$lclIndex,[System.Collections.ArrayList]$Templates){
+        Clear-Host
+
+        $lclCounter = 0
+        [STIG]$newSTIG = [STIG]::new()
+        
+        
+        ForEach($template in $Templates){
+            Write-Host "["$lclCounter.ToString()"]  " -NoNewline
+            Write-Host $template.stigid
+            $lclCounter++
+        }
+        Write-Host ""
+        $menuSelection = Read-Host -Prompt "Which STIG?"
+        [int]$intNumber = [convert]::ToInt32($menuSelection,10)
+        if($intNumber -ge 0){
+            $newSTIG.stigid = $Templates[$intNumber].stigid
+            if($Templates.stigid -contains $newSTIG.stigid){
+                $responseWEBorDB = Read-Host "Is the a WEB or DATABASE STIG? (y/n)"
+                if($responseWEBorDB -eq "y"){
+                    $newSTIG.WEB_OR_DATABASE = "true"
+                }
+                else{
+                    $newSTIG.WEB_OR_DATABASE = "false"
+                }
+                if($newSTIG.WEB_OR_DATABASE -eq "true"){
+                    $newSTIG.WEB_DB_INSTANCE = (Read-Host "Enter the name of the INSTANCE").ToUpper()
+                    $newSTIG.WEB_DB_SITE = (Read-Host "Enter the name of the DATABASE or WEBSITE").ToUpper()
+                }
+                else{
+                    $newSTIG.WEB_DB_INSTANCE = ""
+                    $newSTIG.WEB_DB_SITE = ""
+                }
+                $newSTIG.GenerateUniqueID($this.Assets[$lclIndex].HOST_NAME)
+                Write-Host "Adding " $newSTIG.uniqueID.ToUpper()
+                $this.Assets[$lclIndex].AddSTIG($newSTIG.stigid,"",$newSTIG.WEB_OR_DATABASE,$newSTIG.WEB_DB_SITE,$newSTIG.WEB_DB_INSTANCE)
+
+            }
+        }
+    }
+
+    [void]RemoveSTIGFromAsset([int]$lclIndex){
+        Clear-Host
+        $lclCounter = 0
+        ForEach($cStig in $this.Assets[$lclIndex].STIGs){
+            Write-Host "[" $lclCounter "]   " -NoNewline
+            Write-Host $cStig.uniqueid
+            $lclCOunter++
+        }
+        $menuSelection = Read-Host "Select STIG to Remove"
+        [int]$intNumber = [convert]::ToInt32($menuSelection,10)
+        if($intNumber -ge 0){
+            $uniqueIDtoRemove = ""
+            $uniqueIDtoRemove = $this.Assets[$lclIndex].stigs[$intNumber].uniqueid
+            $this.Assets[$lclIndex].RemoveSTIG($uniqueIDtoRemove)
+        }
+    }
+
+    [void]DisplayAssetInfo($HOST_NAME){
+        Clear-Host
+        $lclIndex = $this.Assets.HOST_NAME.indexof($HOST_NAME)
+        Write-Host "[ ]  HOST_NAME:     " $this.Assets[$lclIndex].HOST_NAME
+        Write-Host "[1]  HOST_IP:       " $this.Assets[$lclIndex].HOST_IP
+        Write-Host "[2]  HOST_MAC:      " $this.Assets[$lclIndex].HOST_MAC
+        Write-Host "[3]  HOST_FQDN:     " $this.Assets[$lclIndex].HOST_FQDN
+        Write-Host "[4]  ROLE:          " $this.Assets[$lclIndex].ROLE
+        Write-Host "[5]  ASSET_TYPE:    " $this.Assets[$lclIndex].ASSET_TYPE
+        Write-Host "[6]  TECH_AREA:     " $this.Assets[$lclIndex].TECH_AREA
+        Write-Host "[7]  COMMENT:       " $this.Assets[$lclIndex].TARGET_COMMENT
+        Write-Host "[8]  Inactive?:     " $this.Assets[$lclIndex].Inactive
+        Write-Host ""
+        Write-host ($this.Assets[$lclIndex].STIGS | Format-Table | Out-String).ToString()
+
+    }
+}
 #endregion
 
 #region Functions
