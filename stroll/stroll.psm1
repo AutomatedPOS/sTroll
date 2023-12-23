@@ -2042,4 +2042,32 @@ function Resize-CKLFileName {
     return $newFileName
 }
 
+function Export-VulnerabilityList {
+<#
+    .SYNOPSIS
+        Reads all checklists inside a given directoy, and exports the vulnerability information to a given filetype.
+        
+    .DESCRIPTION
+        
+    
+    .PARAMETER Path
+        Location of the checklists that will be reviewed.
+    
+    .PARAMETEr ExportType
+        Select CSV JSON or XLSX formats 
+    
+    .PARAMETER Detail
+        Select the level of detail 
+
+    .PARAMETER Destination
+        Export VULN information to this location
+
+
+    .EXAMPLE
+        Resize-CKLFileName -HOST_NAME "WorkstationABC" -stigID "MS_Windows_11_STIG" -vr "V1R3" -fileExtension ".ckl" -MaxFileLength 80
+        Export-VulnerabilityList -path C:\Path\to\review -ExportType CSV -Detail BASIC -Destination C:\path\to\export\file.csv 
+
+    #>
+    
+}
 #endregion
