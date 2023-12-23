@@ -2062,12 +2062,56 @@ function Export-VulnerabilityList {
     .PARAMETER Destination
         Export VULN information to this location
 
-
     .EXAMPLE
-        Resize-CKLFileName -HOST_NAME "WorkstationABC" -stigID "MS_Windows_11_STIG" -vr "V1R3" -fileExtension ".ckl" -MaxFileLength 80
         Export-VulnerabilityList -path C:\Path\to\review -ExportType CSV -Detail BASIC -Destination C:\path\to\export\file.csv 
 
     #>
-    
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [PSDefaultValue(Help='CSV')]
+        [ValidateSet("CSV","JSON")]
+        [string]$ExportType = "CSV",
+        [PSDefaultValue(Help='BASIC')]
+        [ValidateSet("BASIC","MIN","MAX")]
+        [string]$Detail = "BASIC",
+        [Parameter(Mandatory)]
+        [string]$Destination
+    )
+    [System.Collections.ArrayList]$Checklists = @()
+
+    $cklFiles = Get-ChildItem -Path $Path -Include *.ckl -Recurse
+    If($cklFiles.count -gt 0){
+        ForEach($CklFile in $CklFiles){
+            [Checklist]$newCKL = [Checklist]::new($CklFile.fullname)
+            $newCKL.AnalyzeVulns()
+            $newCKL.xml.RemoveAll()
+            $Checklists.Add($newCKL) | Out-Null
+        }
+        $VULNS = ""
+        if($Detail -eq "BASIC"){
+            $VULNS = $Checklists | Select-Object -Property stigid,version,release,FileInfo.Name, uniqueID,HOST_NAME,HOST_IP,HOST_MAC,HOST_FQDN,WEB_DB_INSTANCE,WEB_DB_SITE,TECH_AREA,ROLE,TARGET_COMMENT,AssetType -ExpandProperty VULNS | Select-Object -Property stigid,version,release,FileInfo.Name, uniqueID,HOST_NAME,HOST_IP,HOST_MAC,HOST_FQDN,WEB_DB_INSTANCE,WEB_DB_SITE,TECH_AREA,ROLE,TARGET_COMMENT,AssetType,VulnID,Status,Severity,RuleID,CCRIOverride,KIoRSection,KIoRSubSection,points
+        }
+        elseif ($Detail -eq "MAX") {
+            $VULNS = $Checklists | Select-Object -Property stigid,version,release,FileInfo.Name, uniqueID,HOST_NAME,HOST_IP,HOST_MAC,HOST_FQDN,WEB_DB_INSTANCE,WEB_DB_SITE,TECH_AREA,ROLE,TARGET_COMMENT,AssetType -ExpandProperty VULNS 
+        }
+        elseif ($Detail -eq "MIN") {
+            $VULNS = $Checklists | Select-Object -Property stigid,host_name,tech_area -ExpandProperty VULNS | Select-Object -Property stigid,host_name,tech_area,VulnID,Status,Severity
+        }
+
+        IF($ExportType -eq "CSV"){
+            $VULNS | Export-Csv -Path $Destination -NoTypeInformation -NoClobber 
+        }
+        ElseIF($ExportType -eq "JSON"){
+            ConvertTo-Json -InputObject $VULNS >> $Destination
+        }
+        ElseIf($ExportType -eq "XLSX"){
+            #NOPE!!!  Not today!
+        }
+        $vulns | Out-GridView
+    }
+    else{
+        #Do Nothing
+    }
 }
 #endregion
