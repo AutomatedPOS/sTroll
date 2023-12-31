@@ -807,6 +807,301 @@ class Asset{
             $this.Inactive = $true
         }
     }
+    [void]Stroll([System.Collections.ArrayList]$lclTemplates){
+        [System.Collections.ArrayList]$CKLS = @()
+        $PathToCurrent = $PWD.ToString() + "\current\" + $this.HOST_NAME
+        If($this.Inactive){
+            #Asset is currently INACTIVE.  Remove current contents.
+            if(Test-Path -Path $PathToCurrent){
+                #$CKLList = Get-ChildItem -Path $PathToCurrent -Include *.ckl -Recurse
+                #ForEach($cklFile in $CKLList){
+                #    Remove-Item -Path $cklFile.FullName
+                #}
+                #
+                #Archive the asset
+                $DestinationPath = $PWD.ToString() + "\archive\" + $this.HOST_NAME
+                Compress-Archive -Path $PathToCurrent -DestinationPath $DestinationPath -CompressionLevel Optimal
+                Remove-Item $PathToCurrent -Recurse
+            }
+
+
+        }
+        else{
+            
+            #Asset is ACTIVE.  Check for and create Checklists.
+            $PathToCurrent = $PWD.ToString() + "\current\" + $this.HOST_NAME
+            If(Test-Path -Path $PathToCurrent){
+                #Path to CURRENT Asset folder exists.  
+            }
+            else{
+                #Path to CURRENT Asset folder does not exist,  create it.
+                New-Item -ItemType Directory -Path $PathToCurrent
+
+            }
+            #Path now exists, find the checklists and load into memory (only once per asset - this will get slow..)
+            $CKLFiles = Get-ChildItem -Path $PathToCurrent -Include *.ckl -Recurse
+            
+            ForEach($CKLFile in $CKLFiles){
+                [Checklist]$newChecklist = [Checklist]::new($CKLFile.fullname)
+                $CKLS.Add($newChecklist)
+            }
+            
+            #Now the existing checklists are in memory, so we loop thru what SHOULD be there per the STIG to asset mapping (Forward Looks)
+            if($CKLS.Count -gt 0){
+                #There is at least 1 CKL to check
+                ForEach($stig in $this.STIGS){
+
+                    if($CKLS.uniqueID.ToUpper().Contains($stig.uniqueID.ToUpper())){
+                        #Checklist exists. - Check the CKL Information?
+                        $AnyChanges = $false
+                        $tempINDEX = $CKLS.uniqueID.ToUpper().indexof($stig.uniqueID.ToUpper())
+                        if($tempINDEX -ge 0){
+                            #Check the CKL Version against the Template folder, update to CKL in Template folder if not matched.
+                            $templateIndex = $lclTemplates.stigid.indexof($CKLS[$tempINDEX].stigid)
+                            $VRMismatch = $false
+                            if($templateIndex -ge 0){                                
+                                if($lclTemplates[$templateIndex].version -ne $CKLS[$tempINDEX].version){$VRMismatch = $true}
+                                if($lclTemplates[$templateIndex].release -ne $CKLS[$tempINDEX].release){$VRMismatch = $true}                 
+                            }
+                            if($VRMismatch){
+                                Write-Host "Version / Release mismatch on " $stig.uniqueID.toUpper()
+                                [Checklist]$newChecklist = [Checklist]::new($lclTemplates[$templateIndex].FileInfo.Fullname)
+                                $newChecklist.HOST_NAME = $this.HOST_NAME
+                                $newChecklist.SetHOSTNAME()
+                                $newChecklist.HOST_IP = $this.HOST_IP
+                                $newChecklist.SetIP()
+                                $newChecklist.HOST_FQDN = $this.HOST_FQDN
+                                $newChecklist.SetFQDN()
+                                $newChecklist.HOST_MAC = $this.HOST_MAC
+                                $newChecklist.SetMAC()
+                                $newChecklist.ROLE = $this.ROLE
+                                $newChecklist.SetROLE()
+                                if($this.TECH_AREA -ne ""){
+                                    $newChecklist.TECH_AREA = $this.TECH_AREA
+                                    $newChecklist.SetTechArea()
+                                }
+                                $newChecklist.WEB_OR_DATABASE = $stig.WEB_OR_DATABASE.tolower()
+                                $newChecklist.SetWDB()
+                                $newChecklist.WEB_DB_SITE = $stig.WEB_DB_SITE
+                                $newChecklist.SetDB()
+                                $newChecklist.WEB_DB_INSTANCE = $stig.WEB_DB_INSTANCE
+                                $newChecklist.SetInstance()
+                                $newChecklist.TARGET_COMMENT = $this.TARGET_COMMENT
+                                $newChecklist.SetTargetComment()
+                                $tempVR = "v" + $newChecklist.version.ToString() + "r" + $newChecklist.release
+                                
+                                $tempFileName = Resize-CKLFileName -HOST_NAME $newChecklist.HOST_NAME -stigID $newChecklist.stigid -DBSite $newChecklist.WEB_DB_SITE -DBInstance $newChecklist.WEB_DB_INSTANCE -vr $tempVr -fileExtension ".ckl" -MaxFileLength 75
+                                #Update VulnInfo
+                                [stroll]$tempSTROLL=[stroll]::new($true)
+                                $newChecklist.xml = $tempSTROLL.Import_Checklist($false,$false,$CKLS[$tempINDEX].xml,$newChecklist.xml)
+                                $savetoPAth = $PathToCurrent + "\" + $tempFileName
+                                $newChecklist.xml.Save($savetoPAth)
+                                Write-Host $tempFileName
+                                #Remove old checklist
+
+                                Remove-Item -Path $CKLS[$tempINDEX].FileInfo.FullName
+                                Remove-Variable tempFileName,tempSTROLL
+
+                            }
+                            else{
+                                #If the versions match, then check the host information
+                                #checkIP
+                                If($CKLS[$tempINDEX].HOST_IP -ne $this.HOST_IP){
+                                    $CKLS[$tempINDEX].HOST_IP = $this.HOST_IP
+                                    $CKLS[$tempINDEX].SetIP()
+                                    $AnyChanges = $true
+                                }
+                                #checkMAC
+                                If($CKLS[$tempINDEX].HOST_MAC -ne $this.HOST_MAC){
+                                    $CKLS[$tempINDEX].HOST_MAC = $this.HOST_MAC
+                                    $CKLS[$tempINDEX].SetMAC()
+                                    $AnyChanges = $true
+                                }
+                                #checkFQDN
+                                If($CKLS[$tempINDEX].HOST_FQDN -ne $this.HOST_FQDN){
+                                    $CKLS[$tempINDEX].HOST_FQDN = $this.HOST_FQDN
+                                    $CKLS[$tempINDEX].SetFQDN()
+                                    $AnyChanges = $true
+                                }
+
+                                #checkROLE
+                                If($CKLS[$tempINDEX].ROLE -ne $this.ROLE){
+                                    $CKLS[$tempINDEX].ROLE = $this.ROLE
+                                    $CKLS[$tempINDEX].SetROLE()
+                                    $AnyChanges = $true
+                                }
+
+                                #checkTechArea
+                                If($this.TECH_AREA -eq "" -or $this.TECH_AREA -eq $null){
+                                    #Do nothing since TechArea is not being forced.
+                                } 
+                                ElseIf($CKLS[$tempINDEX].TECH_AREA -ne $this.TECH_AREA){
+                                    $CKLS[$tempINDEX].TECH_AREA = $this.TECH_AREA
+                                    $CKLS[$tempINDEX].SetTechArea()
+                                    $AnyChanges = $true
+                                }
+                                #checkComment
+                                If($CKLS[$tempINDEX].TARGET_COMMENT -ne $this.TARGET_COMMENT){
+                                    $CKLS[$tempINDEX].TARGET_COMMENT = $this.TARGET_COMMENT
+                                    $CKLS[$tempINDEX].SetTargetComment()
+                                    $AnyChanges = $true
+                                }
+                            }
+                            Remove-Variable VRMismatch, templateIndex
+                        }
+                        else{
+                            $tempERROR = "Issue checking STIG Information - " + $stig.uniqueID.ToUpper()
+                            Write-Error -Message $tempERROR
+                            Remove-Variable tempError
+                        }
+
+
+                        if($AnyChanges){
+                            #Change Detected,  Save new CKL and remove old.
+                            $tempVR = "v" + $CKLS[$tempINDEX].Version.ToString() + "r" + $CKLS[$tempINDEX].Release.ToString()
+                            $tempFileName = Resize-CKLFileName -HOST_NAME $this.HOST_NAME -stigID $CKLS[$tempINDEX].stigid -DBSite $CKLS[$tempINDEX].WEB_DB_SITE -DBInstance $CKLS[$tempINDEX].WEB_DB_INSTANCE -vr $tempVR -fileExtension ".ckl" -MaxFileLength 75
+                            $savetoPAth = $PathToCurrent + "\" + $tempFileName
+                            $CKLS[$tempINDEX].xml.save($savetoPAth)
+                            Write-Host "Updated " $tempFileName
+                            Remove-Item -Path $CKLS[$tempINDEX].FileInfo.FullName
+                            Remove-Variable tempVR, tempFileName,savetoPAth
+                        }
+                        Remove-Variable AnyChanges,tempINDEX
+
+                    }
+                    else{
+                        #Checklist does not exist.  See if there is a template for it.
+                        if($lclTemplates.stigid.Contains($stig.stigid)){
+                            #Template Exists
+                            [checklist]$newChecklist =[Checklist]::new($lclTemplates[$lclTemplates.stigid.indexof($stig.stigid)].FileInfo.Fullname)
+                            $newChecklist.HOST_NAME = $this.HOST_NAME
+                            $newChecklist.SetHOSTNAME()
+
+                            $newChecklist.HOST_IP = $this.HOST_IP
+                            $newChecklist.SetIP()
+
+                            $newChecklist.HOST_FQDN = $this.HOST_FQDN
+                            $newChecklist.SetFQDN()
+
+                            $newChecklist.HOST_MAC = $this.HOST_MAC
+                            $newChecklist.SetMAC()
+
+                            $newChecklist.ROLE = $this.ROLE
+                            $newChecklist.SetROLE()
+
+                            if($this.TECH_AREA -ne ""){
+                                $newChecklist.TECH_AREA = $this.TECH_AREA
+                                $newChecklist.SetTechArea()
+                            }
+
+                            $newChecklist.WEB_OR_DATABASE = $stig.WEB_OR_DATABASE.tolower()
+                            $newChecklist.SetWDB()
+
+                            $newChecklist.WEB_DB_SITE = $stig.WEB_DB_SITE
+                            $newChecklist.SetDB()
+
+                            $newChecklist.WEB_DB_INSTANCE = $stig.WEB_DB_INSTANCE
+                            $newChecklist.SetInstance()
+
+                            $newChecklist.TARGET_COMMENT = $this.TARGET_COMMENT
+                            $newChecklist.SetTargetComment()
+
+                            $tempVR = "v" + $newChecklist.version.ToString() + "r" + $newChecklist.release
+                            $tempFileName = Resize-CKLFileName -HOST_NAME $newChecklist.HOST_NAME -stigID $newChecklist.stigid -DBSite $newChecklist.WEB_DB_SITE -DBInstance $newChecklist.WEB_DB_INSTANCE -vr $tempVr -fileExtension ".ckl" -MaxFileLength 75
+                        
+                            $savetoPAth = $PathToCurrent + "\" + $tempFileName
+                            $newChecklist.xml.Save($savetoPAth)
+                            Write-Host $tempFileName
+
+                        }
+                        else{
+                            #Template does not exist
+                            Write-Host $stig.uniqueID "No Template"
+                            pause
+                        }
+                    }
+                }
+                
+            }
+            else{
+                #There are no CKLs, so make them all.
+                ForEach($stig in $this.STIGS){
+                    if($lclTemplates.stigid.Contains($stig.stigid)){
+                        #template exists - make the checklist.
+                        [checklist]$newChecklist =[Checklist]::new($lclTemplates[$lclTemplates.stigid.indexof($stig.stigid)].FileInfo.Fullname)
+                        $newChecklist.HOST_NAME = $this.HOST_NAME
+                        $newChecklist.SetHOSTNAME()
+
+                        $newChecklist.HOST_IP = $this.HOST_IP
+                        $newChecklist.SetIP()
+
+                        $newChecklist.HOST_FQDN = $this.HOST_FQDN
+                        $newChecklist.SetFQDN()
+
+                        $newChecklist.HOST_MAC = $this.HOST_MAC
+                        $newChecklist.SetMAC()
+
+                        $newChecklist.ROLE = $this.ROLE
+                        $newChecklist.SetROLE()
+
+                        if($this.TECH_AREA -ne ""){
+                            $newChecklist.TECH_AREA = $this.TECH_AREA
+                            $newChecklist.SetTechArea()
+                        }
+
+                        $newChecklist.WEB_OR_DATABASE = $stig.WEB_OR_DATABASE.tolower()
+                        $newChecklist.SetWDB()
+
+                        $newChecklist.WEB_DB_SITE = $stig.WEB_DB_SITE
+                        $newChecklist.SetDB()
+
+                        $newChecklist.WEB_DB_INSTANCE = $stig.WEB_DB_INSTANCE
+                        $newChecklist.SetInstance()
+
+                        $newChecklist.TARGET_COMMENT = $this.TARGET_COMMENT
+                        $newChecklist.SetTargetComment()
+
+                        $tempVR = "v" + $newChecklist.version.ToString() + "r" + $newChecklist.release
+                        $tempFileName = Resize-CKLFileName -HOST_NAME $newChecklist.HOST_NAME -stigID $newChecklist.stigid -DBSite $newChecklist.WEB_DB_SITE -DBInstance $newChecklist.WEB_DB_INSTANCE -vr $tempVr -fileExtension ".ckl" -MaxFileLength 75
+                        
+                        $savetoPAth = $PathToCurrent + "\" + $tempFileName
+                        $newChecklist.xml.Save($savetoPAth)
+                        Write-Host $tempFileName
+                    }
+                    else{
+                        #template does not exist - warn user
+                        Write-Host "Template does not exist" $stig.uniqueID
+                        pause
+                    }
+                }
+            }
+            #Reverse lookup time,  Make sure that the only CKLs posted for an asset are expected ones.
+            [System.Collections.ArrayList]$CKLS = @()
+            $CKLFiles = Get-ChildItem -Path $PathToCurrent -Include *.ckl -Recurse
+            ForEach($CKLFile in $CKLFiles){
+                [Checklist]$newChecklist = [Checklist]::new($CKLFile.fullname)
+                $CKLS.Add($newChecklist)
+            }
+
+        
+            if($CKLS.Count -gt 0){
+                ForEach($ckl in $CKLS){
+                    if($this.STIGS.uniqueID.ToUpper().Contains($ckl.uniqueID.ToUpper())){
+                        #Discovered Checklist is in the correct folder.
+                    }
+                    else{
+                        #Should not happen unless someone removed a STIG from memory OR added a ckl that shouldnt be there.
+                        Write-Host "Found issue at " $ckl.FileInfo.FullName
+                        Remove-Item -Path $ckl.fileInfo.Fullname 
+                    }
+                }
+
+            }
+
+        }
+        
+    }
+    
 }
 
 class AssetList{
@@ -1166,6 +1461,294 @@ class AssetList{
         Write-Host ""
         Write-host ($this.Assets[$lclIndex].STIGS | Format-Table | Out-String).ToString()
 
+    }
+}
+
+class stroll{
+    [AssetList]$AL = [AssetList]::New()
+    [System.Collections.ArrayList]$Templates = @()
+    [System.Collections.ArrayList]$Checklists = @()
+    [System.Object]$SecurityOverrides = @()
+    [string]$PATHWorkingDirectory = ""
+    [System.Collections.ArrayList] $scores = @()
+
+    stroll(){
+        $this.PATHWorkingDirectory = $PWD.ToString()
+        IF(Test-Path($this.PATHWorkingDirectory + "\Templates")){}
+        ELSE{mkdir -Path ($this.PATHWorkingDirectory + "\Templates")}
+
+        if(Test-Path($This.PATHWorkingDirectory + "\STIGs")){}
+        else{mkdir -Path ($this.PATHWorkingDirectory + "\STIGs")}
+
+        if(Test-Path($this.PATHWorkingDirectory + "CURRENT")){}
+        else{mkdir -Path ($this.PATHWorkingDirectory + "\CURRENT")}
+
+        if(Test-Path($this.PATHWorkingDirectory + "IMPORTS")){}
+        else{mkdir -Path ($this.PATHWorkingDirectory + "\IMPORTS")}
+
+        if(Test-Path($this.PATHWorkingDirectory + "ARCHIVE")){}
+        else{mkdir -Path ($this.PATHWorkingDirectory + "\ARCHIVE")}
+
+        #$this.Load_AssetListJSON($this.PATHWorkingDirectory + "\AssetList.JSON")
+        $this.Load_AssetList($this.PATHWorkingDirectory + "\AssetList.XML")
+        $this.Load_Templates($this.PATHWorkingDirectory + "\Templates")
+        $this.Load_SeverityOverrides($this.PATHWorkingDirectory + "\Severity_Overrides.csv")
+        $this.Menu_MAIN()
+    }
+    stroll([switch]$MethodsOnly){}
+    #region Loads
+    [void] Load_AssetListJSON([string]$lclpath){
+        $this.AL = [AssetList]::new()
+        if(Test-Path -Path $lclpath){
+            $this.AL.ImportJSON($lclPath)
+        }
+    }
+    [void] Load_Templates([string]$lclPath){
+        $this.Templates = @()
+        if(Test-Path -path $lclPath){
+            $templateFiles = Get-ChildItem -Path $lclPath -Include *.ckl -Recurse
+            foreach($templateFile in $templateFiles){
+                [Checklist]$newChecklist = [Checklist]::new($templateFile.FullName)
+                $this.Templates.Add($newChecklist) | out-null
+            }
+        }
+    }
+    [void] Load_SeverityOverrides([string]$lclPath){
+        if(Test-Path -Path $lclPath){
+            $This.SecurityOverrides = Import-Csv -Path $lclPath
+        }
+    }
+    [void] Load_AssetList([string]$lclpath){
+        $this.AL = [AssetList]::new()
+        if(Test-Path -Path $lclpath){
+            $this.AL.ImportXML($lclpath)
+            if($this.AL.Assets.Count -eq 0){
+                Write-Error -Message "No assets were imported from the asset list or the asset is was found to be empty."
+            }
+        }
+        else{
+            Write-Error -Message "Invalid path to the Assets File."
+        }
+        
+    }
+    #endregion
+    #region MenuSystem
+    [void] Menu_Display([switch]$ShowTitle,[switch]$ClearScreen,[string]$MenuTitle,[string]$OptionA,[string]$OptionB,[string]$OptionC,[string]$OptionD,[string]$OptionE){
+        if($ClearScreen){Clear-Host}
+        if($ShowTitle){$this.Menu_Title()}
+
+        Write-Host -ForegroundColor Yellow "---------- $MenuTitle ----------"
+        Write-Host "`r`r"
+        If($OptionA -ne ""){Write-Host "[1]  " $OptionA}
+        If($OptionB -ne ""){Write-Host "[2]  " $OptionB}
+        If($OptionC -ne ""){Write-Host "[3]  " $OptionC}
+        If($OptionD -ne ""){Write-Host "[4]  " $OptionD}
+        If($OptionE -ne ""){Write-Host "[5]  " $OptionE}
+        Write-Host "`r"
+        Write-Host -ForegroundColor Gray "[z]   Back"
+        Write-Host -ForegroundColor Gray "[q]   Quit"
+        Write-Host ""
+        Write-Host -ForegroundColor Yellow "------------------------------"
+        Write-Host ""
+    }
+    [void] Menu_Title(){
+        Write-Host -ForegroundColor Red "
+  ______________________________ ________   ____     ____     
+ /   _____/\__    ___/\______   \\_      \ |    |   |    |    
+ \_____  \   |    |    |       _/ /   |   \|    |   |    |    
+ /       /   |    |    |    |   \/    |    \    |___|    |___ 
+/_______/    |____|    |____|___/\_________/_______/\_______/
+
+                                                v2.0.0.231231
+
+
+
+
+"
+        
+    }
+    [void] Menu_MAIN(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"Main Menu","STROLL","Import","Export","Edit","Tools")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.SanityCheck()}
+                '2'{$this.Menu_IMPORT()}
+                '3'{$this.Menu_EXPORT()}
+                '4'{$this.Menu_EDIT()}
+                '5'{$this.Menu_TOOL()}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "zz")
+    }
+    [void] Menu_IMPORT(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"IMPORT Menu","Import Assets","Import Checklists","Import STIG/Asset Mapping","","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.AL.ImportAssetsCSV();$this.al.ExportXML()}
+                '2'{$this.Process_CKL_Imports()}
+                '3'{$this.AL.ImportSTIGtoASSETMapping();$this.al.ExportXML()}
+                '4'{}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_EXPORT(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"EXPORT Menu","Export Asset List","Export STIG/Asset Mapping","Export ALL VULNs","Export Severity Override Report","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{Clear-Host;$this.AL.displayAssetList()}
+                '2'{Clear-Host;$this.AL.Assets | Select-Object -Property HOST_NAME -ExpandProperty STIGS | Out-GridView}
+                '3'{Clear-Host;if($this.Checklists.Count -eq 0){$this.Inspect_Checklists($this.PATHWorkingDirectory + "\Current")};$this.Checklists | Select-Object -Property HOST_NAME,HOST_IP,HOST_MAC,HOST_FQDN,TARGET_COMMENT,TECH_AREA,ROLE,stigid,version,release,WEB_OR_DATABASE,WEB_DB_INSTANCE,WEB_DB_SITE -ExpandProperty VULNS | Export-CSV -Path ($this.PATHWorkingDirectory + "\VULNS.csv").ToString();Write-host "All Vulns were exported to " $this.PATHWorkingDirectory ; pause}
+                '4'{if($this.Checklists.Count -eq 0){$this.Inspect_Checklists($this.PATHWorkingDirectory + "\Current")};$this.Checklists | Select-Object -Property HOST_NAME, stigid,tech_Area,fileinfo -ExpandProperty vulns | Where-Object {$_.CCRIOverride} | Select-Object -Property HOST_NAME,stigid,tech_area,fileinfo,vulnid,status,severity,ruleid | Out-GridView}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_EDIT(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"EDIT Menu","EDIT Asset List","EDIT Asset","","","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.Menu_EDIT_ASSETLIST()}
+                '2'{$this.Menu_EDIT_ASSET()}
+                '3'{}
+                '4'{}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_TOOL(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"TOOLs Menu","CCRI Tools","Download STIGs","Create Templates","","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.Menu_TOOL_CCRI()}
+                '2'{$this.DownloadSTIGS()}
+                '3'{$this.CreateTemplates()}
+                '4'{}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_EDIT_ASSETLIST(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"EDIT Asset List Menu","SAVE Asset List","PURGE Asset List","RELOAD Asset List","DISPLAY Asset List","LOAD from XML")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.al.ExportXML()}
+                '2'{$this.al.purgeAssetList()}
+                '3'{$this.Load_AssetList($this.PATHWorkingDirectory + "\AssetList.XML")}
+                '4'{Clear-Host;$this.AL.displayAssetList()}
+                '5'{Clear-Host;$PATH_toAL = Read-Host -Prompt "Enter path to Asset List";$this.AL.ImportXML($PATH_toAL)}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_EDIT_ASSET(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"EDIT Asset Menu","ADD Asset","MODIFY Asset","REMOVE Asset","","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.AL.ManualAddAsset()}
+                '2'{$this.AL.EditAsset($this.Templates)}
+                '3'{$HostToRemove = Read-Host -Prompt "Enter HOST_NAME of asset to remove"; $this.AL.RemoveAsset($HostToRemove);Remove-Variable HostToRemove}
+                '4'{}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    [void] Menu_TOOL_CCRI(){
+        $menuSelection = ""
+        DO{
+            $this.Menu_Display($true,$true,"CCRI Tools","CCRI Score","Inspect Other Checklist Location","","","")
+            $menuSelection = Read-Host "Enter your selection"
+            switch($menuSelection){
+                '1'{$this.Inspect_Checklists($this.PATHWorkingDirectory + "\Current");$this.Score_CCRI();$this.Display_Scores();pause}
+                '2'{$tempValue = Read-Host -Prompt "Enter path to checklists you would like to inspect";If(Test-Path -Path $tempValue){$this.Inspect_Checklists($tempValue)} }
+                '3'{}
+                '4'{}
+                '5'{}
+                'q'{exit}
+                'Q'{exit}
+            }
+        }
+        until($menuSelection -eq "z")
+    }
+    #endregion
+
+    [void] DownloadSTIGS(){
+        $PathToSTIGFolder = $This.PATHWorkingDirectory + "\STIGS"
+        if(Test-Path $PathToSTIGFolder){}
+        ELSE{mkdir -Path $PathToSTIGFolder}
+        Clear-Host
+        Write-Host "Downloading STIGS from public.cyber.mil"
+        Get-STIG -DestinationPath $PathToSTIGFolder -STIGID ALL 
+    }
+    [void] CreateTemplates(){
+        $PathToSTIGFolder = $this.PATHWorkingDirectory + "\STIGS"
+        $PathToTemplateFolder = $this.PATHWorkingDirectory + "\Templates\"
+        $STIGZips = Get-ChildItem -Path $PathToSTIGFolder -Include "*.zip" -Recurse
+        ForEach($STIG in $STIGZips){
+            Write-Host $STIG.FullName
+            New-TemplateCKL -SourceZIP $STIG.FullName -DestinationPath $PathToTemplateFolder 
+        }
+        $this.Load_Templates($this.PATHWorkingDirectory + "\Templates")
+    }
+    [void] SanityCheck(){
+        Clear-Host
+        $lclCounter = 0
+        ForEach($lclAsset in $this.AL.Assets){
+            $percentComplete = ($lclCounter / $this.AL.Assets.count) * 100
+            Write-Progress -Activity "Strolling" -Status $lclAsset.HOST_NAME -PercentComplete $percentComplete -Id 100
+            $lclAsset.Stroll($this.Templates)
+            
+            $lclCounter++
+        }
+        Write-Progress -Activity "Strolling" -Completed -Id 100
+        $FoldersInCurrent = Get-ChildItem -Depth 1 -Directory -Path ($this.PATHWorkingDirectory +"\Current").ToString()
+        Foreach($lclFolder in $FoldersInCurrent){
+            If($this.AL.Assets.HOST_NAME -contains $lclFolder.Name){
+                #Folder is linked to an asset
+            }
+            else{
+                $DestinationPath = $this.PATHWorkingDirectory + "\archive\" + $lclFolder.name
+                Compress-Archive -Path $lclFolder.fullname -DestinationPath $DestinationPath -CompressionLevel Optimal 
+                Remove-Item -Path $lclFolder.fullname -Recurse
+
+            }
+        }
+
+
+        pause
     }
 }
 #endregion
@@ -1999,6 +2582,21 @@ function Resize-CKLFileName {
         Resize-CKLFileName -HOST_NAME "WorkstationABC" -stigID "MS_Windows_11_STIG" -vr "V1R3" -fileExtension ".ckl" -MaxFileLength 80
 
     #>
+    param (
+        [Parameter(Mandatory)]
+        [string]$HOST_NAME,
+        [Parameter(Mandatory)]
+        [string]$stigid,
+        [string]$DBSite,
+        [string]$DBInstance,
+        [Parameter(Mandatory)]
+        [string]$vr,
+        [Parameter(Mandatory)]
+        [string]$fileExtension,
+        [Parameter(Mandatory)]
+        [int]$MaxFileLength
+    )
+    $MaxFileLength = 70
     [string]$newFileName = ""
     [string]$dtg = (Get-date -Format yyyyMMdd-HHmmssfff).ToString()
     $newFileName = $HOST_NAME + "_" + $stigID + "_" + $vr + "_" + $DBInstance + "_" + $DBSite + "_" + $dtg + $fileExtension
@@ -2108,7 +2706,7 @@ function Export-VulnerabilityList {
         ElseIf($ExportType -eq "XLSX"){
             #NOPE!!!  Not today!
         }
-        $vulns | Out-GridView
+        #$vulns | Out-GridView
     }
     else{
         #Do Nothing
