@@ -116,19 +116,21 @@ class Checklist{
     [void] EmptyXML(){
         $this.xml.RemoveAll()
     }
-    [void] AnalyzeVulnsCCRI([System.Array]$SeverityOverrides){
-        $this.VULNS =@()
-        ForEach($lclVuln in $this.xml.CHECKLIST.STIGS.iSTIG.VULN){
-            [Vulnerability]$newVuln = [Vulnerability]::new($lclVuln)
-            if($SeverityOverrides.VulnID.ToUpper() -contains $newVuln.VulnID.ToUpper()){
-                $newVuln.SetOverride()
-                $lclIndex = $SeverityOverrides.VulnID.ToUpper().IndexOf($newVuln.VulnID.ToUpper())
-                $newVuln.SetKIORSection($SeverityOverrides[$lclIndex].KIoRSection)
-                $newVuln.SetKIORSubSection($SeverityOverrides[$lclIndex].KIoRSubSection)
+    [void] AnalyzeVulns([System.Array]$SeverityOverrides){
+        $This.AnalyzeVulns()
+        #Needs to be cleaned up.
+        #$this.VULNS =@()
+        #ForEach($lclVuln in $this.xml.CHECKLIST.STIGS.iSTIG.VULN){
+        #    [Vulnerability]$newVuln = [Vulnerability]::new($lclVuln)
+        #    if($SeverityOverrides.VulnID.ToUpper() -contains $newVuln.VulnID.ToUpper()){
+        #        $newVuln.SetOverride()
+        #        $lclIndex = $SeverityOverrides.VulnID.ToUpper().IndexOf($newVuln.VulnID.ToUpper())
+        #        $newVuln.SetKIORSection($SeverityOverrides[$lclIndex].KIoRSection)
+        #        $newVuln.SetKIORSubSection($SeverityOverrides[$lclIndex].KIoRSubSection)
 
-            }
-            $this.VULNS.Add($newVuln)
-        }
+        #    }
+        #    $this.VULNS.Add($newVuln)
+        #}
     }
     [void] AnalyzeVulns(){
         $this.VULNS =@()
@@ -1462,6 +1464,62 @@ class AssetList{
         Write-host ($this.Assets[$lclIndex].STIGS | Format-Table | Out-String).ToString()
 
     }
+    [void] ImportAssetsCSV(){
+        Clear-Host
+        Write-Host "Import Assets from CSV"
+        Write-Host "CSV must be Tab delimited, with the following headers"
+        Write-Host "ROLE	ASSET_TYPE	HOST_NAME	HOST_IP	HOST_MAC	HOST_FQDN	TARGET_COMMENT	TECH_AREA	Inactive"
+        Write-Host
+        [string]$CSVPath = Read-Host -Prompt "Enter the path to the tab delimited CSV file"
+        Write-Host $CSVPath
+        if(Test-Path -Path $CSVPath){
+            Write-Host "Path available, Importing"
+            $CSVData = Import-Csv -Delimiter "`t" -Path $CSVPath
+            foreach($line in $CSVData){
+                if($this.Assets.HOST_NAME -contains $line.HOST_NAME.ToUpper()){
+                    #Asset already in memory - Maybe update information?
+                }
+                else{
+                    $this.AddAsset($line.ROLE,$line.ASSET_TYPE,$line.HOST_NAME,$line.HOST_IP,$line.HOST_MAC,$line.HOST_FQDN,$line.TARGET_COMMENT,$line.TECH_AREA)
+                    if($line.Inactive.toupper() -eq "TRUE"){
+                        $this.Assets[-1].Inactive = $true
+                    }
+                }
+            }
+        }
+        else{
+            Write-Host "Path not available.  Import Failed"
+        }
+        pause
+    }
+    [void] ImportSTIGtoASSETMapping(){
+        Clear-Host
+        Write-Host "Import STIG to ASSET Mapping CSV"
+        Write-Host "CSV must be tab delimited, with the folling headers"
+        Write-Host "HOST_NAME	STIGID	WEB_OR_DATABASE	WEB_DB_SITE	WEB_DB_INSTANCE	TECH_AREA"
+        Write-Host ""
+        [string]$CSVPath = Read-Host -Prompt "Enter the path to the tab delimited CSV file"
+        Write-Host $CSVPath
+        if(Test-Path -Path $CSVPath){
+            Write-Host "Patch available, Importing"
+            $CSVData = Import-Csv -Delimiter "`t" -Path $CSVPath
+            foreach($line in $CSVData){
+                if($this.Assets.HOST_NAME -contains $line.HOST_NAME.ToUpper()){
+                    #Asset is in memory
+                    $this.Assets[$this.Assets.HOST_NAME.IndexOf($line.HOST_NAME.ToUpper())].AddSTIG($line.STIGID,$line.TECH_AREA,$line.WEB_OR_DATABASE,$line.WEB_DB_SITE.toUpper(),$line.WEB_DB_INSTANCE.ToUpper())
+                }
+                else{
+                    #Asset is not in memory
+                    Write-Host "Asset doesn't exist - Unable to import" $line
+                }
+            }
+        }
+        else{
+            Write-Host "Path not available.  Import Failed"
+        }
+        pause
+    }
+
 }
 
 class stroll{
@@ -1749,6 +1807,253 @@ class stroll{
 
 
         pause
+    }
+    [void] Process_CKL_Imports(){
+        Clear-Host
+        [string]$PATHImports = $this.PATHWorkingDirectory + "\Imports"
+        $FILECKLs = Get-ChildItem -Path $PATHImports -Include *.ckl -Recurse
+        $lclCounter = 0
+        ForEach($FILECkl in $FILECKLs){
+            $lclCounter++
+            $percentComplete = ($lclCounter / $FILECKLs.Count) * 100
+            Write-Progress -Activity "Importing Checklists" -Status $FILECkl.Name -PercentComplete $percentComplete
+            [Checklist]$importChecklist = [Checklist]::new($FILECKl.FullName.ToString())
+            If($importChecklist.HOST_NAME -eq ""){
+                Write-Error -Message "Checklist missing a host name"
+            }
+            ElseIf($importChecklist.xml.CHECKLIST.STIGS.iSTIG.Count -gt 1){
+                $NoErrors = $true 
+                For($lclIndex = 0; $lclIndex -lt $importChecklist.xml.CHECKLIST.STIGS.iSTIG.Count;$lclIndex++){
+                    $duplicateImportXML = $importChecklist.xml.Clone()
+                    $iSTIG = $duplicateImportXML.CHECKLIST.STIGS.iSTIG[$lclIndex]
+                    ForEach($lclISTIG in $duplicateImportXML.CHECKLIST.STIGS.iSTIG){
+                        if($iSTIG -eq $lclISTIG){
+                            #Do nothing, because we want to keep this one
+                        }
+                        else{
+                            $duplicateImportXML.CHECKLIST.STIGS.RemoveChild($lclISTIG)
+                        }
+                    }
+                    #Now,  the XML should only contain a single checklist
+                    if($duplicateImportXML.CHECKLIST.STIGS.iSTIG.Count -gt 1 -or $duplicateImportXML.CHECKLIST.STIGS.iSTIG.Count -eq 0){
+                        
+                    }
+                    else{
+                        [Checklist]$SingleCKL=[Checklist]::new($duplicateImportXML)
+                        $PathToOriginalCkl = $this.Find_CKL_by_UID($SingleCKL.HOST_NAME,$SingleCKL.uniqueID)
+                        if($PathToOriginalCkl -eq ""){
+                            $NoErrors = $false
+                            $errormsg = "Unable to locate an existing checklist for " + $SingleCKL.uniqueID
+                            Write-Error -Message $errormsg
+                            Remove-Variable errorMsg
+                        }
+                        else{
+                            [Checklist]$originalChecklist = [Checklist]::new($PathToOriginalCkl)
+                            $newChecklistXML = $this.Import_Checklist($false,$false,$SingleCKL.xml,$originalChecklist.xml)
+                            $tempVR = "v" + $originalChecklist.version.ToString() + "r" + $originalChecklist.release.ToString()
+                            $tempFileName = Resize-CKLFileName -HOST_NAME $originalChecklist.HOST_NAME -stigID $originalChecklist.stigid -DBSite $originalChecklist.WEB_DB_SITE -DBInstance $originalChecklist.WEB_DB_INSTANCE -vr $tempVR -fileExtension ".ckl" -MaxFileLength 75
+                            $PATH_Save = $originalChecklist.FileInfo.Directory.FullName + "\" + $tempFileName
+                            $newChecklistXML.save($PATH_Save)
+                            Remove-Item -Path $originalChecklist.FileInfo.FullName
+                            Remove-Variable newChecklistXML,tempVR,tempFileName,PATH_Save
+                        }
+                    }
+
+                    Remove-Variable duplicateImportXML
+
+                }
+                if($NoErrors){Remove-Item -Path $importChecklist.FileInfo.FullName}
+            }
+            else{
+                #Single Checklist in File
+                #Find the correct checklist to import to.
+                $PathToOriginalCkl = $this.Find_CKL_by_UID($importChecklist.HOST_NAME,$importChecklist.uniqueID)
+                if($PathToOriginalCkl -eq ""){
+                    $errorMsg = "Unable to locate an existing checklist for " + $importChecklist.uniqueID
+                    Write-Error -Message $errorMsg
+                    Remove-Variable errorMsg
+                }
+                else{
+                    [Checklist]$originalChecklist = [Checklist]::new($PathToOriginalCkl)
+                    $newChecklistXML = $this.Import_Checklist($false,$false,$importChecklist.xml,$originalChecklist.xml)
+                    $tempVR = "v" + $originalChecklist.version.ToString() + "r" + $originalChecklist.release.ToString()
+                    $tempFileName = Resize-CKLFileName -HOST_NAME $originalChecklist.HOST_NAME -stigID $originalChecklist.stigid -DBSite $originalChecklist.WEB_DB_SITE -DBInstance $originalChecklist.WEB_DB_INSTANCE -vr $tempVR -fileExtension ".ckl" -MaxFileLength 75
+                    $PATH_Save = $originalChecklist.FileInfo.Directory.FullName + "\" + $tempFileName
+                    $newChecklistXML.save($PATH_Save)
+
+                    Remove-Item -Path $importChecklist.FileInfo.FullName
+                    Remove-Item -Path $originalChecklist.FileInfo.FullName
+
+                    Remove-Variable newChecklistXML,tempVR,tempFileName,PATH_Save
+                }
+                Remove-Variable PathToOriginalCkl
+            }
+        }
+        Write-Progress -Activity "Importing Checklists" -Completed
+        pause
+
+
+    }
+    [string] Find_CKL_by_UID([string]$HOST_NAME,[string]$UID){
+        $PATHToCKL = ""
+        $PATHTemp = $this.PATHWorkingDirectory + "\Current\" + $HOST_NAME
+        if(Test-Path -Path $PATHTemp){
+            #Path Exists
+            $FILESExistingCkls = Get-ChildItem -Path $PATHTemp -Include *.ckl -Recurse
+            foreach($FILECkl in $FILESExistingCkls){
+                [Checklist]$newChecklist=[Checklist]::new($FILECkl.FullName)
+                if($newChecklist.uniqueID -eq $UID){
+                    $PATHToCKL = $newChecklist.FileInfo.FullName
+
+                }
+            }
+        }
+        return $PATHToCKL
+    }
+    [System.Xml.XmlNode] Import_Checklist([switch]$EnforceNotReviewed,[Switch]$AllowMatchOnVULID,[System.XML.XmlNode]$fromXML,[System.Xml.XmlNode]$toXML){
+        [System.Collections.ArrayList]$FromVULNS = @()
+        [System.Collections.ArrayList]$ToVULNS = @()
+        [System.Xml.XmlNode]$outputXML = $toXML
+        [System.Xml.XmlNode]$inputXML = $fromXML
+
+        foreach($tmpXML in $inputXML.CHECKLIST.STIGS.iSTIG.VULN){
+            [Vulnerability]$newVuln=[Vulnerability]::new($tmpXML)
+            $FromVULNS.Add($newVuln) | Out-Null
+        }
+        Remove-Variable tmpXML
+        Foreach($tmpXML in $outputXML.CHECKLIST.STIGS.iSTIG.VULN){
+            [Vulnerability]$newVuln=[Vulnerability]::new($tmpXML)
+            $ToVULNS.Add($newVuln) | Out-Null
+        }
+        Remove-Variable tmpXML
+        foreach($VulIN in $FromVULNS){
+            $CurrentTime = (Get-Date -Format yyyyMMdd-HHmmss).ToString()
+            if($ToVULNS.RuleID.Contains($VulIN.RuleID)){
+                #match on RuleID 
+                $ruleIndex = $ToVULNS.RuleID.Indexof($VulIN.RuleID)
+                if($outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STIG_DATA.ATTRIBUTE_DATA[$outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STIG_DATA.VULN_ATTRIBUTE.IndexOf("Rule_ID")] -eq $VulIN.RuleID){
+                    if($EnforceNotReviewed.IsPresent){
+                        #Force the Not Review Status!
+                        if($VulIN.Status -ne $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS){
+                            $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                            $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS = $CurrentTime + ": Status change from " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS + " to " + $VulIN.Status + ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS
+                            $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS = $VulIN.STATUS
+                        }
+                        else{
+                            $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                            $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS = $CurrentTime + ": Status remains " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS +  ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS                         
+                        }
+                    }
+                    else{
+                        #Do not force the Not Reviewed Status
+                        if($VulIN.Status -eq "Not_Reviewed"){
+                            #do nothing!!!!
+                        }
+                        else{
+                            if($VulIN.Status -ne $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS){
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS = $CurrentTime + ": Status change from " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS + " to " + $VulIN.Status + ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS = $VulIN.STATUS
+                            }
+                            else{
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS = $CurrentTime + ": Status remains " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].STATUS +  ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$ruleIndex].COMMENTS                         
+                            }
+                        
+                        }
+                    }
+
+                }
+                else{
+                    #This should never happen.
+                    #Pause the import routine, as there is an issue with the code.  
+                    Write-Error -Message "Unexpected Error is importing a checklist (Rule to Rule Match issue)"
+                    pause
+                }
+                Remove-Variable ruleIndex
+            }
+            ElseIf($ToVULNS.VulnID.Contains($VulIN.VulnID)){
+                #matched on Vuln ID
+                $VulIDIndex = $ToVULNS.VulnID.Indexof($VulIN.VulnID)
+                if($outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STIG_DATA.ATTRIBUTE_DATA[$outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STIG_DATA.VULN_ATTRIBUTE.IndexOf("Vuln_Num")] -eq $VulIN.VulnID){
+                    if($AllowMatchOnVULID.IsPresent){
+                        #Force matching on VUL ID - This will cause problems in the future...
+                        if($EnforceNotReviewed.IsPresent){
+                            #Match by Vul, enforce NR status
+                            if($VulIN.Status -ne $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS){
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS = $CurrentTime + ": Status change from " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS + " to " + $VulIN.Status + ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS = $VulIN.STATUS
+                            }
+                            else{
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS = $CurrentTime + ": Status remains " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS +  ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS
+                            }
+                        }
+                        else{
+                            #Match by VulID, Do not enforce NR Status
+                            if($VulIN.Status -eq "Not_Reviewed"){
+                                #Do Nothing!
+                            }
+                            else{
+                                if($VulIN.Status -ne $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS){
+                                    $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                    $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS = $CurrentTime + ": Status change from " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS + " to " + $VulIN.Status + ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS
+                                    $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS = $VulIN.STATUS
+                                }
+                                else{
+                                    $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].FINDING_DETAILS = $VulIN.FindingDetails
+                                    $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS = $CurrentTime + ": Status remains " + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].STATUS +  ". `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS
+                                    
+                                }                                
+                            }             
+                        }
+                    }
+                    else{
+                        #Do not match based on VulID.  This will still make a comment.
+                        $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS = $CurrentTime + ": Matched by VULNID and not RULEID.  Imported status (" + $VulIN.Status + ") not applied. `r`n" + $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].COMMENTS
+                        $outputXML.CHECKLIST.STIGS.iSTIG.VULN[$VulIDIndex].FINDING_DETAILS = "VULNID Import - Imported findings as follows. `r`n" + $VulIN.FindingDetails
+                    }
+                }
+                else{
+                    #this should never happen.
+                    #pause the import routine, as there is an issue with the code.
+                    Write-Error -Message "Unexpected Error importing a checklist (Vuln_num to Vuln_num issue)"
+                }
+
+            }
+            else{
+                #No matches
+            }
+        }
+        return $outputXML
+    }
+    [void] Inspect_Checklists([string]$PathToChecklists){
+        $this.Checklists = @()
+        #$tempPath = $this.PATHWorkingDirectory + "\Current"
+        $tempPath = $PathToChecklists
+        $ListCKL = Get-ChildItem -Path $tempPath -Include *.ckl -Recurse
+        $lclCounter = 0
+        ForEach($fileCKL in $ListCKL){
+            $percentComplete = ($lclCounter / $ListCKL.Count) *100
+            Write-Progress -Activity "Inspecting Checklists" -Status $fileCKL.name -PercentComplete $percentComplete
+            [Checklist]$newChecklist = [Checklist]::new($fileCKL.FullName)
+            $newChecklist.AnalyzeVulns($this.SecurityOverrides)
+            #$newChecklist.xml = [System.Xml.XmlNode]::new()
+            $newChecklist.EmptyXML()
+            $this.Checklists.Add($newChecklist) | Out-Null
+            $lclCOunter++
+        }
+        Write-Progress -Activity "Inspecting Checklists" -Completed
+        Clear-Host
+        
+        
+    }
+    [void] Score_CCRI(){
+        #To Be Completed
+    }
+    [void] Display_Scores(){
+        #To Be Completed
     }
 }
 #endregion
