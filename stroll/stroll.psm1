@@ -3017,4 +3017,8 @@ function Export-VulnerabilityList {
         #Do Nothing
     }
 }
+
+function Invoke-STROLL{
+    [stroll]$newStroll = [stroll]::new()
+}
 #endregion
