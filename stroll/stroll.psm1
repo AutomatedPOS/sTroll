@@ -2298,7 +2298,7 @@ function Get-STIG {
                     else{
                         $tempDestinationPath = $tempDestinationPath + "\" + ($STIGLink -replace ".*./","")
                     }
-                    Invoke-WebRequest -Uri $STIGLink -OutFile $tempDestinationPath
+                    Invoke-WebRequest -Uri $STIGLink -OutFile $tempDestinationPath 
 
                     Remove-Variable tempDestinationPath
                 }
@@ -2310,7 +2310,7 @@ function Get-STIG {
                     else{
                         $tempDestinationPath = $tempDestinationPath + "\" + ($SRGLink -replace ".*./","")
                     }
-                    Invoke-WebRequest -Uri $SRGLink -OutFile $tempDestinationPath
+                    Invoke-WebRequest -Uri $SRGLink -OutFile $tempDestinationPath -
                     Remove-Variable tempDestinationPath
                 }
             }
