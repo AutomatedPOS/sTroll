@@ -2283,6 +2283,7 @@ function Get-STIG {
         [ValidateSet("ALL")]
         [string]$STIGID = "ALL"
     )
+    $Global:ProgressPreference = 'SilentlyContinue'
     if(Test-Path $DestinationPath){
         #Path is good,  Pull CyberMIL links to STIGs
         $CyberMIL = Invoke-WebRequest -Uri "https://public.cyber.mil/stigs/downloads/"
@@ -2298,8 +2299,8 @@ function Get-STIG {
                     else{
                         $tempDestinationPath = $tempDestinationPath + "\" + ($STIGLink -replace ".*./","")
                     }
+                    Write-Output $tempDestinationPath
                     Invoke-WebRequest -Uri $STIGLink -OutFile $tempDestinationPath 
-
                     Remove-Variable tempDestinationPath
                 }
                 ForEach($SRGLink in ($CyberMIL.Links | Where-Object {$_.href -like "*SRG.zip"}).href ){
@@ -2310,7 +2311,8 @@ function Get-STIG {
                     else{
                         $tempDestinationPath = $tempDestinationPath + "\" + ($SRGLink -replace ".*./","")
                     }
-                    Invoke-WebRequest -Uri $SRGLink -OutFile $tempDestinationPath -
+                    Write-Output $tempDestinationPath
+                    Invoke-WebRequest -Uri $SRGLink -OutFile $tempDestinationPath 
                     Remove-Variable tempDestinationPath
                 }
             }
@@ -2326,7 +2328,7 @@ function Get-STIG {
     else {
         Write-Error -Message "Provided path does not exist."
     }
-
+    $Global:ProgressPreference = 'Continue'
     
 }
 
